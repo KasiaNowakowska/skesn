@@ -11,6 +11,8 @@ Options:
 # import packages
 import time
 
+import pickle
+
 import sys
 sys.path.append('/nobackup/mm17ktn/ENS/skesn/skesn/')
 
@@ -100,6 +102,13 @@ def fftinx(variable, x1):
     return psd, freq, fft
     
 input_path = args['--input_path']
+output_path = args['--output_path']
+
+print(output_path)
+if not os.path.exists(output_path):
+    os.makedirs(output_path)
+    print('made directory')
+
 q = np.load(input_path+'/q.npy')
 ke = np.load(input_path+'/KE.npy')
 time_vals = np.load(input_path+'/time_vals.npy')
@@ -117,44 +126,59 @@ data = np.hstack((ke_column, q_column))
 # Print the shape of the combined array
 print(data.shape)
 
+ss = StandardScaler()
+
+data = ss.fit_transform(data)
+print(np.shape(data))
+
 modelsync = EsnForecaster(
-n_reservoir=2000,
-spectral_radius=0.80,
-sparsity=0.80,
-regularization='l2',
-lambda_r=1e-2,
-in_activation='tanh',
-out_activation='identity',
-use_additive_noise_when_forecasting=True,
-random_state=42,
-use_bias=False)
+            n_reservoir=2000,
+            spectral_radius=0.80,
+            sparsity=0.80,
+            regularization='l2',
+            lambda_r=1e-2,
+            in_activation='tanh',
+            out_activation='identity',
+            use_additive_noise_when_forecasting=True,
+            random_state=42,
+            use_bias=True,
+            use_b=True,
+            beta=1e-2)
 
 trainlen = 14000
 train_times = time_vals[0:trainlen]
 ts = data[0:trainlen,:]
+n_splits=4
 v = ValidationBasedOnRollingForecastingOrigin(n_training_timesteps=6000,
                                               n_test_timesteps=2000,
-                                              n_splits=4,
+                                              n_splits=n_splits,
                                               metric=mean_squared_error,
                                               overlap=0,
-                                              sync = False)
-                                              
+                                              sync=False)
+
+p_grid = dict(
+              n_reservoir = [2000,3000,4000],
+              spectral_radius = [0.7,0.8,0.9])
+                                             
 summary, best_model = v.grid_search(modelsync,
-                                    param_grid=dict(
-                                    n_reservoir=[2000,4000,6000]),
+                                    param_grid=p_grid,
                                     y=ts,
                                     X=None)
                                     
 summary_df = pd.DataFrame(summary).sort_values('rank_test_score')
+print(summary_df)
+
 fig, ax = plt.subplots(1, 1, figsize=(12, 6), sharex=True)
 table_rows = []
 param_names = list(summary_df.iloc[0]['params'].keys())
+print(param_names)
+
 ranks = []
 test_scores = []
 for i in range(len(summary_df)):
     ranks.append(int(summary_df.iloc[i]['rank_test_score']))
     table_rows.append(list(summary_df.iloc[i]['params'].values()))
-    test_scores.append(np.abs(np.array([float(summary_df.iloc[i][f'split{j}_test_score']) for j in range(5)])))
+    test_scores.append(np.abs(np.array([float(summary_df.iloc[i][f'split{j}_test_score']) for j in range(n_splits)])))
 ax.boxplot(test_scores)
 ax.set_yscale('log')
 ax.set_xticks([])
@@ -166,4 +190,25 @@ the_table = ax.table(cellText=table_rows,
                       colLabels=ranks,
                       loc='bottom')
 plt.tight_layout()
-plt.savefig('summary.png')
+plt.savefig(output_path+'/summary.png')
+
+model_parameters = {
+    'n_reservoir': modelsync.n_reservoir,
+    'spectral_radius': modelsync.spectral_radius,
+    'sparsity': modelsync.sparsity,
+    'lambda_r': modelsync.lambda_r,
+    'use_additive_noise_when_forecasting': modelsync.use_additive_noise_when_forecasting,
+    'use_bias': modelsync.use_bias,
+    'use_b': modelsync.use_b,
+    'beta': modelsync.beta
+}
+
+# Save hyperparameters to a text file
+with open(output_path+'/esn_hyperparameters.txt', 'w') as f:
+    for key, value in model_parameters.items():
+        f.write(f"{key}: {value}\n")
+
+
+with open(output_path+'/hyperparam_search.txt', 'w') as f:
+    for key, value in p_grid.items():
+        f.write(f"{key}: {value}\n")

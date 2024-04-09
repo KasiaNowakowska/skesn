@@ -126,26 +126,6 @@ class ValidationBasedOnRollingForecastingOrigin:
         grid = GridSearchCV(forecaster, param_grid,
                             scoring=scorer,
                             cv=TimeSeriesSplit(n_splits=self.n_splits,
-                                               test_size=self.n_test_timesteps))
-        grid.fit(X=X, y=y)
-        return grid.cv_results_, grid.best_estimator
-        
-    def grid_search_moved(self, forecaster, param_grid, y, X):
-        """
-        For error metrics (they are assumed here), score values will be negative even for
-        non-negative metrics. You need to compute absolute values of the scores to get
-        the expected values.
-        """
-        if X is None: # TODO: some sklearn subroutines like gridsearchcv
-            # cannot pass X=None so we need to pass array of None
-            X = [None for _ in range(len(y))]
-        if issubclass(type(forecaster), BaseForecaster):
-            forecaster = SklearnWrapperForForecaster(forecaster)
-            param_grid = {f'custom_estimator__{k}': v for k, v in param_grid.items()}
-        scorer = make_scorer(self.metric, greater_is_better=False)
-        grid = GridSearchCV(forecaster, param_grid,
-                            scoring=scorer,
-                            cv=TimeSeriesSplit(n_splits=self.n_splits,
                                                test_size=self.n_test_timesteps,
                                                max_train_size=self.n_training_timesteps))
         grid.fit(X=X, y=y)
