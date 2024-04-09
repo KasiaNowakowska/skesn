@@ -3,7 +3,7 @@ from tqdm import tqdm
 
 from base import BaseForecaster
 from misc import correct_dimensions, identity
-from weight_generators import standart_weights_generator
+from weight_generators import standart_weights_generator, standart_weights_generator_withb
 
 from enum import Enum
 
@@ -140,7 +140,7 @@ class EsnForecaster(BaseForecaster):
         }
 
     def _fit(self, y, X=None,
-             initialization_strategy=standart_weights_generator,
+             initialization_strategy=standart_weights_generator_withb,
              inspect=True):
         """Fit forecaster to training data. Overloaded method from
         BaseForecaster.
@@ -172,7 +172,7 @@ class EsnForecaster(BaseForecaster):
         print(self.use_additive_noise_when_forecasting)
         endo_states, exo_states = \
             self._treat_dimensions_and_bias(y, X, representation='3D')
-        self.W_in_, self.W_, self.W_c_ = \
+        self.W_in_, self.W_, self.W_c_, self.b = \
             initialization_strategy(self.random_state_,
                                     self.n_reservoir,
                                     self.sparsity,
@@ -513,7 +513,7 @@ class EsnForecaster(BaseForecaster):
         if exo_state is not None:
             preactivation += np.dot(self.W_c_, exo_state)
         if self.use_b:
-            preactivation += (self.random_state_.rand(n_reservoir))
+            preactivation += self.b
         s = ACTIVATIONS[self.in_activation]['direct'](preactivation)
         if (forecasting_mode and self.use_additive_noise_when_forecasting) or \
            (not forecasting_mode and self.regularization == 'noise'):

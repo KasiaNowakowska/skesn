@@ -25,6 +25,30 @@ def standart_weights_generator(random_state, n_reservoir: int, sparsity: float, 
         W_c = random_state.rand(n_reservoir, n_exo) * 2 - 1
     return W_in, W, W_c
 
+def standart_weights_generator_withb(random_state, n_reservoir: int, sparsity: float, spectral_radius: float, endo_states: np.ndarray, exo_states: any):
+    n_endo = endo_states.shape[2]
+    n_exo = 0 if exo_states is None else exo_states.shape[-1]
+
+    W_in = random_state.rand(n_reservoir, n_endo) * 2 - 1
+
+    # initialize recurrent weights:
+    # begin with a random matrix centered around zero:
+    W = random_state.rand(n_reservoir, n_reservoir) - 0.5
+    # delete the fraction of connections given by (self.sparsity):
+    W[random_state.rand(*W.shape) < sparsity] = 0
+    # compute the spectral radius of these weights:
+    radius = np.max(np.abs(np.linalg.eigvals(W)))
+    # rescale them to reach the requested spectral radius:
+    W = W * (spectral_radius / radius)
+
+    # generate random bias vector b
+    b = random_state.rand(n_reservoir)
+
+    W_c = None
+    if n_exo > 0:
+        W_c = random_state.rand(n_reservoir, n_exo) * 2 - 1
+    return W_in, W, W_c, b
+
 def optimal_weights_generator(verbose = 2, range_generator = np.linspace, 
     steps = 100, hidden_std = 0.5, find_optimal_input = True, thinning_step = 10):
     def _generator(random_state, n_reservoir: int, sparsity: float, spectral_radius: any, 
