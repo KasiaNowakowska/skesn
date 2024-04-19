@@ -154,6 +154,11 @@ if not os.path.exists(images_output_path2):
     os.makedirs(images_output_path2)
     print('made directory')
 
+images_output_path3 = output_path+'/peakspath'
+if not os.path.exists(images_output_path3):
+    os.makedirs(images_output_path3)
+    print('made directory')
+
 #load in data
 q = np.load(input_path+'/q.npy')
 ke = np.load(input_path+'/KE.npy')
@@ -232,6 +237,28 @@ figC, axesC = plt.subplots(1, figsize=(12, 6), tight_layout=True)
 
 predicted_peaks = []
 next_peak_time = []
+next_peak_value = []
+
+# Define number of bins and bin edges
+num_bins = 60 # Adjust the number of bins as needed
+bin_edges = np.linspace(prediction_times.min(), prediction_times.max(), num_bins + 1)
+
+onset_true = np.zeros((len(prediction_times)))
+offset_true = np.zeros((len(prediction_times)))
+onset_pred_binned = np.zeros(num_bins)
+offset_pred_binned = np.zeros(num_bins)
+
+forecast_interval = 150
+no_of_forecasts = int(len(prediction_times)/forecast_interval) + 1
+q_forecast = np.zeros((no_of_forecasts, ensembles))
+ke_forecast = np.zeros((no_of_forecasts, ensembles))
+forecast_times = np.zeros((no_of_forecasts))
+q_true = np.zeros(no_of_forecasts)
+ke_true = np.zeros(no_of_forecasts)
+print(no_of_forecasts)
+
+ensemble_all_vals_ke = np.zeros((len(prediction_times), ensembles))
+ensemble_all_vals_q = np.zeros((len(prediction_times), ensembles))
 
 # run through ensembles
 for i in range(ensembles):
@@ -240,16 +267,22 @@ for i in range(ensembles):
     #predict
     future_predictionsync = modelsync.predict(predictionlen)
 
+    #inverse scalar
+    inverse_training_data = ss.inverse_transform(ts) 
+    inverse_prediction = ss.inverse_transform(future_predictionsync)
+    inverse_test_data = ss.inverse_transform(test_data)
+    inverse_future_data = ss.inverse_transform(future_data) #this include the sync data
+
     #plot prediction for this ensemble member
     fig, axes = plt.subplots(2, figsize=(12, 6), tight_layout=True, sharex=True)
     for j in range(data[0:trainlen].shape[1]):
-        axes[j].plot(train_times, ss.inverse_transform(ts)[:, j],
+        axes[j].plot(train_times, inverse_training_data[:, j],
                       linewidth=2,
                       label='Training data')
-        axes[j].plot(prediction_times, ss.inverse_transform(future_predictionsync)[:,j],
+        axes[j].plot(prediction_times, inverse_prediction[:,j],
                       linewidth=2,
                       label='Prediction')
-        axes[j].plot(future_times, ss.inverse_transform(data[trainlen:trainlen+predictionlen+synclen])[:, j],
+        axes[j].plot(future_times, inverse_future_data[:, j],
                       linewidth=2,
                       label='True')
         plt.legend()
@@ -266,16 +299,16 @@ for i in range(ensembles):
     #add prediction to plot of all ensembles
     for j in range(data[0:trainlen].shape[1]):
         if i == 0:
-            axesA[j].plot(train_times, ss.inverse_transform(ts)[:, j],
+            axesA[j].plot(train_times, inverse_training_data[:, j],
                       linewidth=2,
                       label='Training data',
                       alpha=0.5, color='blue')
-            axesA[j].plot(future_times, ss.inverse_transform(data[trainlen:trainlen+predictionlen+synclen])[:, j],
+            axesA[j].plot(future_times, inverse_future_data[:, j],
                       linewidth=2,
                       label='True',
                       alpha=0.5, color='blue')
         if i % 10 == 0:
-            axesA[j].plot(prediction_times, ss.inverse_transform(future_predictionsync)[:,j],
+            axesA[j].plot(prediction_times, inverse_prediction[:,j],
                       linewidth=2,
                       label='Prediction')
     axesA[0].set_ylabel('KE')
@@ -287,10 +320,10 @@ for i in range(ensembles):
 
     #plot phase space diagram for ensemble member
     figB, axB = plt.subplots(1, 2, figsize = (12,6), tight_layout=True)
-    s_pred = axB[0].scatter(ss.inverse_transform(future_predictionsync)[:,1], ss.inverse_transform(future_predictionsync)[:,0], 
+    s_pred = axB[0].scatter(inverse_prediction[:,1], inverse_prediction[:,0], 
                             cmap='viridis', marker='.', alpha=0.8,
                             c=prediction_times, vmin=prediction_times[0], vmax=prediction_times[-1])
-    s_true = axB[1].scatter(ss.inverse_transform(test_data)[:, 1], ss.inverse_transform(test_data)[:, 0],
+    s_true = axB[1].scatter(inverse_test_data[:, 1], inverse_test_data[:, 0],
                             cmap='viridis', marker='.', c=prediction_times,
                             vmin=prediction_times[0], vmax=prediction_times[-1])
     cbar_true = figB.colorbar(s_true, ax=axB[1], label='time')
@@ -303,32 +336,81 @@ for i in range(ensembles):
     axB[1].set_title('true')
     figB.savefig(images_output_path2+'/phasespace_predictions%i.png' % i)
     
-    #peaks
+    #### peaks ####
+    # set thresholds 
     threshold = 0.00010
     distance = 10
     prominence = 0.00005
-    peaks_pred, _ = find_peaks(ss.inverse_transform(future_predictionsync)[:,0], height=threshold, distance=distance, prominence = prominence)  # Adjust 'threshold' as needed # Adjust 'threshold' as needed
-    num_pred_peaks = len(peaks_pred)
+
+    # find the peaks in the true test data (plot the peaks and record time of the next peak)
     if i == 0:
-        peaks_true, _ = find_peaks(ss.inverse_transform(test_data)[:, 0], height=threshold, distance=distance, prominence = prominence)  # Adjust 'threshold' as needed
+        peaks_true, _ = find_peaks(inverse_test_data[:, 0], height=threshold, distance=distance, prominence = prominence)
         num_true_peaks = len(peaks_true)
-        axesC.scatter(prediction_times[peaks_true], np.ones_like(peaks_true) * 0, marker='x')
-        true_next_peak = prediction_times[peaks_true[0]]
+        axesC.scatter(prediction_times[peaks_true], np.ones_like(peaks_true) * 0, marker='x') #adds peaks in true test data to plot
+        true_next_peak = prediction_times[peaks_true[0]] #records time of next peak
+        true_next_peak_value = inverse_test_data[peaks_true[0], 0]
+
+    # find the peaks in the prediction (plot the peaks of every 10th ensemble member and record time of next peak)
+    peaks_pred, _ = find_peaks(inverse_prediction[:,0], height=threshold, distance=distance, prominence = prominence) 
+    num_pred_peaks = len(peaks_pred)
     predicted_peak_times = prediction_times[peaks_pred]
     predicted_peaks.append(num_pred_peaks)
-    axesC.set_xlim(prediction_times[0], prediction_times[-1])
     if i % 10 == 0:
         axesC.scatter(predicted_peak_times, np.ones_like(peaks_pred) * (i+1))
-    next_peak_time.append(predicted_peak_times[0])
-    axesC.set_xlabel('time')
-    axesC.set_ylabel('ensmebles')
+    if len(predicted_peak_times) > 0:
+        next_peak_time.append(predicted_peak_times[0])
+        next_peak_value.append(inverse_prediction[peaks_pred[0],0])
+    else:
+        print('no peaks recorded')
+        next_peak_time.append(np.inf) #no peak so set the next peak super far in advance so its not recorded
 
+    axesC.set_xlim(prediction_times[0], prediction_times[-1])
+    axesC.set_xlabel('time')
+    axesC.set_ylabel('ensemble member')
+
+    ### crossing dynamical system ###
+    KE_threshold = 0.00015
+    q_values_crossed_true = np.zeros((len(prediction_times)))
+    time_values_crossed_true = np.zeros((len(prediction_times)))
+    for t in range(len(prediction_times)):
+        if (inverse_test_data[t,0] >= KE_threshold and inverse_test_data[t-1,0] < KE_threshold) or (inverse_test_data[t,0] <= KE_threshold and inverse_test_data[t-1,0] > KE_threshold):
+            time_values_crossed_true[t] = prediction_times[t]
+            q_values_crossed_true[t] = inverse_test_data[t,1]
+
+    q_values_crossed_pred = np.zeros((len(prediction_times)))
+    time_values_crossed_pred = np.zeros((len(prediction_times)))
+    for t in range(len(prediction_times)):
+        if (inverse_prediction[t,0] >= KE_threshold and inverse_prediction[t-1,0] < KE_threshold) or (inverse_prediction[t,0] <= KE_threshold and inverse_prediction[t-1,0] > KE_threshold):
+            time_values_crossed_pred[t] = prediction_times[t]
+            q_values_crossed_pred[t] = inverse_prediction[t,1]
+    figD, axD = plt.subplots(1)
+    axD.plot(prediction_times, q_values_crossed_true)
+    axD.plot(prediction_times, q_values_crossed_pred, linestyle='--')
+    axD.set_xlabel('time')
+    axD.set_ylabel('q')
+    figD.savefig(images_output_path3+'/crosssings%i.png' % i)
+
+    ### onset and offset freq against time ###
+    KE_threshold = 0.00015
+    for t in range(len(prediction_times)):
+        bin_index = np.searchsorted(bin_edges, prediction_times[t]) - 1
+        if i == 0:
+            if (inverse_test_data[t,0] >= KE_threshold and inverse_test_data[t-1,0] < KE_threshold):
+                onset_true[t] = 1
+            elif (inverse_test_data[t,0] <= KE_threshold and inverse_test_data[t-1,0] > KE_threshold):
+                offset_true[t] = 1
+
+        if (inverse_prediction[t,0] >= KE_threshold and inverse_prediction[t-1,0] < KE_threshold):
+            onset_pred_binned[bin_index] += 1
+        elif (inverse_prediction[t,0] <= KE_threshold and inverse_prediction[t-1,0] > KE_threshold):
+            offset_pred_binned[bin_index] += 1
+ 
     #determine MSE, NRMSE and lag 
     datanames = ['KE', 'q']
     for k in range(2):
         print('\n', datanames[k])
-        prediction_reshape = ss.inverse_transform(future_predictionsync)[:,k].reshape(len(future_predictionsync), 1)
-        test_data_reshape = ss.inverse_transform(test_data)[:,k].reshape(len(future_predictionsync), 1)
+        prediction_reshape = inverse_prediction[:,k].reshape(len(future_predictionsync), 1)
+        test_data_reshape = inverse_test_data[:,k].reshape(len(future_predictionsync), 1)
         print('\n NRMSE for first 500 timesteps =', calculate_nrmse(prediction_reshape[:500-synclen] , test_data_reshape[:500-synclen]))
         print('\n NRMSE for 2000 timesteps=', calculate_nrmse(prediction_reshape[:] , test_data_reshape[:]))
         print('\n MSE for first 500 timesteps =', calculate_mse(prediction_reshape[:500-synclen] , test_data_reshape[:500-synclen]))
@@ -339,8 +421,8 @@ for i in range(ensembles):
             MSE_values_q.append(calculate_mse(prediction_reshape[:] , test_data_reshape[:]))
     for l in range(2):
         print('\n', datanames[l])
-        prediction_reshape = ss.inverse_transform(future_predictionsync)[:,l]
-        test_data_reshape = ss.inverse_transform(test_data)[:,l]
+        prediction_reshape = inverse_prediction[:,l]
+        test_data_reshape = inverse_test_data[:,l]
         print('\n delay for first 500 timesteps =', timedelay(test_data_reshape[:500-synclen], prediction_reshape[:500-synclen]))
         print('\n delay for 2000 timesteps=', timedelay(test_data_reshape[:], prediction_reshape[:]))
         if l == 0:
@@ -349,12 +431,32 @@ for i in range(ensembles):
             lag_values_q.append(timedelay(test_data_reshape[:], prediction_reshape[:]))
             #print(prediction_reshape, test_data_reshape)
 
+    ### metegorams ####
+    forecast_time = 0
+    for t in range(len(prediction_times)):
+      if t % forecast_interval == 0:
+        print(t)
+        print(forecast_time)
+        q_forecast[forecast_time, i] = inverse_prediction[t,1]
+        ke_forecast[forecast_time, i] = inverse_prediction[t,0]
+        forecast_times[forecast_time] = int(prediction_times[t])
+        if i == 0:
+          q_true[forecast_time] = inverse_test_data[t,1] 
+          ke_true[forecast_time] = inverse_test_data[t,0] 
+        forecast_time += 1
+
+    ### ensemble mean ###
+    ensemble_all_vals_ke[:,i] = inverse_prediction[:,0]
+    ensemble_all_vals_q[:,i] = inverse_prediction[:,1]
+
+
 #find avg MSE across ensemble
 avg_MSE_ke = np.mean(MSE_values_ke)
 avg_MSE_q = np.mean(MSE_values_q)
 avg_lag_ke = np.mean(lag_values_ke)
 avg_lag_q = np.mean(lag_values_q)
 
+#calculate fraction of ensembles which find all the peaks and all the peaks apart from 1
 counter_all = 0
 counter_missing_one = 0
 for value in predicted_peaks:
@@ -365,6 +467,11 @@ for value in predicted_peaks:
 fraction_peak_matches = counter_all/ensembles
 fraction_peaks_missing_one = counter_missing_one/ensembles
 
+avg_next_peak_value = np.mean(next_peak_value)
+avg_amplitude_error = np.abs(true_next_peak_value - avg_next_peak_value)
+
+#calculate the fraction of ensembles which predict the next peak within 100 timesteps of the true peak
+#calculate the fraction of ensembles which predict the next peak within 50 timesteps and before the true peak
 counter_next_time_within100 = 0
 counter_next_time_within50andbefore = 0
 for value in next_peak_time:
@@ -374,6 +481,78 @@ for value in next_peak_time:
         counter_next_time_within50andbefore += 1
 fraction_within100 = counter_next_time_within100/ensembles
 fraction_within50andbefore = counter_next_time_within50andbefore/ensembles
+
+# plot for predicted onset/offset vs true
+figE, axE = plt.subplots(1, figsize=(12, 6), tight_layout=True)
+axE.plot(bin_edges[:-1], onset_pred_binned, color='green', linestyle='--', label='predicted onset')
+axE.plot(bin_edges[:-1], offset_pred_binned, color='red', linestyle='--', label='predicted cessation')
+axE.plot(prediction_times, onset_true, color='darkgreen', label='true onset')
+axE.plot(prediction_times, offset_true, color='darkred', label='true cessation')
+plt.legend()
+plt.grid()
+axE.set_xlabel('time')
+axE.set_ylabel('Frequency')
+figE.savefig(output_path+'/onsetoffset.png')
+
+### meteogram plots ###
+figF, axF = plt.subplots(2, figsize=(12, 6), sharex=True, tight_layout=True)
+axF[0].boxplot(ke_forecast.T, labels=forecast_times)
+axF[1].boxplot(q_forecast.T, labels=forecast_times)
+axF[0].scatter(np.arange(1,no_of_forecasts+1,1), ke_true)
+axF[1].scatter(np.arange(1,no_of_forecasts+1,1), q_true)
+axF[0].set_ylabel('KE')
+axF[1].set_ylabel('q')
+axF[1].set_xlabel('time')
+figF.savefig(output_path+'/meteogram.png')
+
+### ensemble means and variance ###
+figG, axG = plt.subplots(1, figsize=(6, 6), tight_layout=True)
+ensemble_mean_ke = np.mean(ensemble_all_vals_ke, axis=1)
+ensemble_mean_q = np.mean(ensemble_all_vals_q, axis=1)
+ensemble_var_ke = np.var(ensemble_all_vals_ke, axis=1)
+ensemble_var_q = np.var(ensemble_all_vals_q, axis=1)
+axG.plot(ensemble_mean_q, ensemble_mean_ke)
+axG.set_xlabel('q')
+axG.set_ylabel('KE')
+axG.set_xlim(0.265, 0.300)
+axG.set_ylim(0, 3e-4)
+figG.savefig(output_path+'/ensemble_mean_phase_diagram.png')
+
+figH, axH = plt.subplots(2, figsize=(12, 6), tight_layout=True, sharex=True)
+for j in range(data[0:trainlen].shape[1]):
+  axH[j].plot(train_times, inverse_training_data[:, j],
+                      linewidth=2,
+                      label='Training data',
+                      alpha=0.5, color='blue')
+  axH[j].plot(future_times, inverse_future_data[:, j],
+                      linewidth=2,
+                      label='True',
+                      alpha=0.5, color='blue')
+  if j == 0:
+    axH[j].plot(prediction_times, ensemble_mean_ke,
+                      linewidth=2,
+                      label='Prediction')
+  elif j == 1:
+    axH[j].plot(prediction_times, ensemble_mean_q,
+                      linewidth=2,
+                      label='Prediction')
+axH[0].set_ylabel('KE')
+axH[1].set_ylabel('q')
+axH[1].set_xlabel('time')
+axH[1].set_xlim(4000,12000)
+axH[0].grid()
+axH[1].grid()
+figH.savefig(output_path+'/ensemble_mean_time_series.png')
+
+figI, axI = plt.subplots(2, figsize=(12, 6), tight_layout=True, sharex=True)
+axI[0].plot(prediction_times, ensemble_var_ke)
+axI[1].plot(prediction_times, ensemble_var_q)
+axI[0].set_ylabel('var KE')
+axI[1].set_ylabel('var q')
+axI[1].set_xlabel('time')
+axI[1].set_xlim(11000,12000)
+figI.savefig(output_path+'/ensemble_var.png')
+
 #save simulation details and results
 simulation_details = {
             'ensembles': ensembles,
@@ -394,6 +573,7 @@ simulation_details = {
             'avg_lag_q': avg_lag_q,
             'fraction_peak_matches': fraction_peak_matches,
             'fraction_peaks_missing_one': fraction_peaks_missing_one,
+            'avg_amplitude_error_for_peak': avg_amplitude_error,
             'fraction_within100': fraction_within100,
             'fraction_within50andbefore': fraction_within50andbefore
 }

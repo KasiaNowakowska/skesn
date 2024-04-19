@@ -43,25 +43,8 @@ ke = np.load(input_path+'/KE.npy')
 time_vals = np.load(input_path+'/time_vals.npy')
 print(len(q), len(ke), len(time_vals))
 
-'''
-lyap_lags_q = np.zeros(10)
-lyap_lags_ke = np.zeros(10)
-for i in range(10):
-    lyap = nolds.lyap_r(q, emb_dim=10, lag=i)
-    print('largest lyapunov exponent q', lyap)
-    lyap_time = 1/ np.abs(lyap)
-    print('lyapunov time q', lyap_time)
-    lyap_lags_q[i] = lyap_time
-    lyap = nolds.lyap_r(ke, emb_dim=10, lag=i)
-    print('largest lyapunov exponent ke', lyap)
-    lyap_time = 1/ np.abs(lyap)
-    print('lyapunov time ke', lyap_time)
-    lyap_lags_ke[i] = lyap_time
+q = q[:8000]
 
-plt.plot(np.linspace(1,10,10), lyap_lags_q)
-plt.plot(np.linspace(1,10,10), lyap_lags_ke)
-plt.show()
-'''
 
 lyap = nolds.lyap_r(q)
 print('largest lyapunov exponent q', lyap)
@@ -90,3 +73,22 @@ print('lyapunov time ke', lyap_time)
 #plt.grid(True)
 #plt.show()
 
+'''
+lyap_lags_q = np.zeros(10)
+lyap_lags_ke = np.zeros(10)
+for i in range(10):
+    lyap = nolds.lyap_r(q, emb_dim=10, lag=i)
+    print('largest lyapunov exponent q', lyap)
+    lyap_time = 1/ np.abs(lyap)
+    print('lyapunov time q', lyap_time)
+    lyap_lags_q[i] = lyap_time
+    lyap = nolds.lyap_r(ke, emb_dim=10, lag=i)
+    print('largest lyapunov exponent ke', lyap)
+    lyap_time = 1/ np.abs(lyap)
+    print('lyapunov time ke', lyap_time)
+    lyap_lags_ke[i] = lyap_time
+
+plt.plot(np.linspace(1,10,10), lyap_lags_q)
+plt.plot(np.linspace(1,10,10), lyap_lags_ke)
+plt.show()
+'''

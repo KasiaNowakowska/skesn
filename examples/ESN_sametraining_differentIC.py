@@ -195,9 +195,8 @@ MSE_values_ke = []
 lag_values_q = []
 lag_values_ke = []
 
-for i in IC:
-    #generate model
-    modelsync = EsnForecaster(
+#generate model
+modelsync = EsnForecaster(
             n_reservoir=n_reservoir,
             spectral_radius=spectral_radius,
             sparsity=sparsity,
@@ -210,18 +209,12 @@ for i in IC:
             use_bias=use_bias,
             use_b=use_b,
             beta=beta)
-    modelsync.fit(ts)
-    last_endo = modelsync.last_endo_state_
-    last_res = modelsync.last_reservoir_state_
-    print(last_endo, last_res)
-    new_endo = np.zeros((len(data[0,:])+1))
-    print(new_endo)
-    new_res = np.zeros(len(last_res))
-    print(len(new_res))
-    new_endo[0], new_endo[1], new_endo[2] = 1, data[trainlen+i-1, 0], data[trainlen+i-1, 1]
-    print(new_endo)
-    modelsync.last_endo_state_ = new_endo
-    modelsync.last_reservoir_state_ = new_res
+modelsync.fit(ts)
+last_endo = modelsync.last_endo_state_
+last_res = modelsync.last_reservoir_state_
+print(last_endo, last_res)
+
+for i in IC:
     future_times = time_vals[trainlen+i:trainlen+i+synclen+predictionlen]
     sync_times = time_vals[trainlen+i:trainlen+i+synclen]
     prediction_times = time_vals[trainlen+i+synclen:trainlen+i+synclen+predictionlen]
