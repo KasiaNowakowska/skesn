@@ -48,6 +48,10 @@ def create_gif(input_path, output_gif, duration):
 input_dir = args['<input_path>']
 output_gif = args['<output_gif>']
 duration = float(args['--duration'])
+
+#if not os.path.exists(output_path):
+ #   os.makedirs(output_path)
+  #  print('made directory')
     
 # Create GIF from images in the specified directory
 create_gif(input_dir, output_gif, duration)

@@ -41,6 +41,11 @@ if not os.path.exists(output_path):
     os.makedirs(output_path)
     print('made directory')
 
+output_path1 = output_path + '/onsets'
+if not os.path.exists(output_path1):
+    os.makedirs(output_path1)
+    print('made directory')
+
 #load in data
 q = np.load(input_path+'/q.npy')
 ke = np.load(input_path+'/KE.npy')
@@ -66,6 +71,69 @@ def calculate_distance(traj1, traj2):
   return distances
 
 #### ANALYSIS ####
+KE_threshold = 0.00015
+
+tvals = np.arange(0,8000,1)
+wait_times = []
+all_times = []
+'''
+for t_i in tvals:
+    
+    # creating grid for subplots
+    fig = plt.figure(constrained_layout=True)
+    fig.set_figheight(6)
+    fig.set_figwidth(6)
+
+    ax1 = plt.subplot2grid(shape=(4, 4), loc=(0, 0), colspan=4, rowspan=3)
+    ax2 = plt.subplot2grid(shape=(4, 4), loc=(3, 0), colspan=4, rowspan=1)
+ 
+    onset_true = np.zeros((len(time_vals[:t_i])))
+    offset_true = np.zeros((len(time_vals[:t_i])))
+
+    for t in range(len(time_vals[:t_i])):
+        if (ke[t] >= KE_threshold and ke[t-1] < KE_threshold):
+            onset_true[t] = 1
+        elif (ke[t] <= KE_threshold and ke[t-1] > KE_threshold):
+            offset_true[t] = 1
+
+  
+    scatter = ax1.scatter(q[:t_i], ke[:t_i], cmap='viridis', marker='.', alpha=0.8, c=time_vals[:t_i], vmin=time_vals[0], vmax=time_vals[t_i])
+    ax1.axhline(y=0.00015)
+    ax1.set_xlabel('q')
+    ax1.set_ylabel('KE')
+    ax1.set_xlim(np.min(q), np.max(q))
+    ax1.set_ylim(np.min(ke), np.max(ke))
+    cbar = plt.colorbar(scatter, ax=ax1, ticks=[time_vals[0], time_vals[t_i]], label='time')
+    ax2.plot(time_vals[:t_i], onset_true, color='green', label='true onset')
+    ax2.plot(time_vals[:t_i], offset_true, color='red', label='true cessation')
+    plt.legend()
+    ax2.set_xlim(5000,7000)
+    ax2.set_ylim(-0.1,1.1)
+    ax2.set_xlabel('time')
+    ax2.set_ylabel('threshold passed') 
+    fig.savefig(output_path1+'/onsets{:05d}.png'.format(t_i))
+    plt.close()
+'''
+
+for t in range(tvals[-1]):
+        if (ke[t] >= KE_threshold and ke[t-1] < KE_threshold):
+            all_times.append(time_vals[t])
+        #elif (ke[t] <= KE_threshold and ke[t-1] > KE_threshold):
+            #all_times.append(time_vals[t])
+
+for i in range(1, len(all_times)):
+  range = all_times[i] - all_times[i-1]
+  wait_times.append(range)
+  
+fig, ax = plt.subplots(1)
+ax.hist(wait_times, bins=20)
+ax.set_xlabel('wait time')
+ax.set_ylabel('frequency')
+fig.savefig(output_path+'/histogram_wait_times_onset.png')
+
+
+'''
+#phase space
 prediction_index = 6010
 prediction_point = data[prediction_index, :]
 print('initial point', prediction_point)
@@ -107,6 +175,7 @@ for t in range(t_value):
     ax[1].set_xlim(0,t_value)
     ax[1].set_ylabel('euclidean distance')
     ax[1].set_ylim(0,0.020)
-    fig.savefig(output_path+'/phase_space_distance%i.png' % t)
+    fig.savefig(output_path+'/phase_space_distance{:03d}.png'.format(t))
     plt.close()
+'''
 
