@@ -179,6 +179,10 @@ images_output_path2 = output_path+'/phasespace'
 if not os.path.exists(images_output_path2):
     os.makedirs(images_output_path2)
     print('made directory')
+images_output_path2b = output_path+'/phasespace/together'
+if not os.path.exists(images_output_path2b):
+    os.makedirs(images_output_path2b)
+    print('made directory')
 
 images_output_path3 = output_path+'/peakspath'
 if not os.path.exists(images_output_path3):
@@ -368,6 +372,19 @@ for i in range(ensembles):
     axB[0].set_title('prediction')
     axB[1].set_title('true')
     figB.savefig(images_output_path2+'/phasespace_predictions%i.png' % i)
+
+    figB2, axB2 = plt.subplots(1, figsize = (12,12), tight_layout=True)
+    s_pred = axB2.scatter(inverse_prediction[:,1], inverse_prediction[:,0], 
+                            cmap='viridis', marker='x', alpha=0.8,
+                            c=prediction_times, vmin=prediction_times[0], vmax=prediction_times[-1])
+    s_true = axB2.scatter(inverse_test_data[:, 1], inverse_test_data[:, 0],
+                            cmap='viridis', marker='.', c=prediction_times,
+                            vmin=prediction_times[0], vmax=prediction_times[-1])
+    axB2.set_xlabel('q')
+    axB2.set_ylabel('KE')
+    axB2.set_ylim(-0.0001, 0.00035)
+    axB2.set_xlim(0.260,0.30)
+    figB2.savefig(images_output_path2b+'/phasespace_predictions{:04d}.png'.format(i))
     
     #### peaks ####
     # set thresholds 
@@ -499,7 +516,10 @@ for i in range(ensembles):
         rangevals = all_times[t] - all_times[t-1]
         wait_times.append(rangevals)
 
-
+np.save(output_path+'/ensemble_all_vals_ke.npy', ensemble_all_vals_ke)
+np.save(output_path+'/ensemble_all_vals_q.npy', ensemble_all_vals_q)
+np.save(output_path+'/test_data_ke.npy', inverse_test_data[:,0])
+np.save(output_path+'/test_data_q.npy', inverse_test_data[:,1])
 
 
 #find avg MSE across ensemble
@@ -508,8 +528,8 @@ avg_MSE_q = np.mean(MSE_values_q)
 avg_lag_ke = np.mean(lag_values_ke)
 avg_lag_q = np.mean(lag_values_q)
 
-figJ, axJ = plt.subplots(2, figsize=(12, 6), sharex=True, tight_layout=True)
 #prediction horizon
+figJ, axJ = plt.subplots(2, figsize=(12, 6), sharex=True, tight_layout=True)
 print('lenght=', len(PH_vals_ke))
 for thresh in range(len(PH_threshold_ke)):
     cumsum_ke = np.cumsum(PH_vals_ke[thresh, :])
@@ -667,33 +687,41 @@ figL.savefig(output_path+'/scattertrue_v_pred.png')
 figM, axM = plt.subplots(1,2 , figsize=(12, 6), tight_layout=True)
 axM[0].scatter(inverse_test_data[:100,0], median_ke[:100], marker='.', color='green')
 axM[1].scatter(inverse_test_data[:100,1], median_q[:100], marker='.', color='green')
-axM[0].fill_between(inverse_test_data[:100,0], lower_bound_ke[:100], upper_bound_ke[:100], color='green', alpha=0.2)
-axM[1].fill_between(inverse_test_data[:100,1], lower_bound_q[:100], upper_bound_q[:100], color='green', alpha=0.2)
+
 figM.savefig(output_path+'/scatter_true_v_median.png')
 
 # pdf of q and KE 
-figN, axN = plt.subplots(1,2 , figsize=(12, 6), tight_layout=True)
-#axN[0].hist(inverse_test_data[:,0], bins=25, density=True)
-#axN[1].hist(inverse_test_data[:,1], bins=25, density=True)
+figN, axN = plt.subplots(2,2 , figsize=(12, 6), tight_layout=True, sharex='col')
 flatten_ensembles_ke = ensemble_all_vals_ke.flatten()
 flatten_ensembles_q = ensemble_all_vals_q.flatten()
-for r in range(ensembles):
-    axN[0].hist(flatten_ensembles_ke, bins=25, density=True)
-    axN[1].hist(flatten_ensembles_q, bins=25, density=True)
-axN[0].set_xlabel('KE')
-axN[1].set_xlabel('q')
-axN[0].set_ylabel('Density')
-axN[0].set_ylabel('Density')
-figN.savefig(output_path+'/pdfs.png')
 
-figO, axO = plt.subplots(1,2 , figsize=(12, 6), tight_layout=True)
-axO[0].hist(inverse_test_data[:,0], bins=25, density=True)
-axO[1].hist(inverse_test_data[:,1], bins=25, density=True)
-axN[0].set_xlabel('KE')
-axN[1].set_xlabel('q')
-axN[0].set_ylabel('Density')
-axN[0].set_ylabel('Density')
-figO.savefig(output_path+'/pdfs_true.png')
+max_pred_ke, min_pred_ke = np.max(flatten_ensembles_ke), np.min(flatten_ensembles_ke)
+max_pred_q, min_pred_q = np.max(flatten_ensembles_q), np.min(flatten_ensembles_q)
+max_true_ke, min_true_ke = np.max(inverse_test_data[:,0]), np.min(inverse_test_data[:,0])
+max_true_q, min_true_q = np.max(inverse_test_data[:,1]), np.min(inverse_test_data[:,1])
+min_ke = np.min((min_pred_ke, min_true_ke))
+max_ke = np.max((max_pred_ke, max_true_ke))
+min_q = np.min((min_pred_q, min_true_q))
+max_q = np.max((max_pred_q, max_true_q))
+
+bins_ke = np.linspace(-1e-4, 3e-4, 20)
+bins_q = np.linspace(0.265, 0.300, 20)
+
+
+axN[1,0].hist(flatten_ensembles_ke, bins=bins_ke, density=True)
+axN[1,1].hist(flatten_ensembles_q, bins=bins_q, density=True)
+axN[0,0].hist(inverse_test_data[:,0], bins=bins_ke, density=True)
+axN[0,1].hist(inverse_test_data[:,1], bins=bins_q, density=True)
+axN[0, 0].set_xlim(min_ke, max_ke)
+axN[1, 0].set_xlim(min_ke, max_ke)
+axN[0, 1].set_xlim(min_q, max_q)
+axN[1, 1].set_xlim(min_q, max_q)
+axN[1, 0].set_xlabel('KE')
+axN[1, 1].set_xlabel('q')
+for i in range(2):
+  for j in range(2):
+    axN[i, j].set_ylabel('density')
+figN.savefig(output_path+'/pdfs.png')
 
 ### wait times ###
 figP, axP = plt.subplots(1, figsize=(12, 6), tight_layout=True)
@@ -701,6 +729,7 @@ axP.hist(wait_times, bins=20)
 axP.set_xlabel('wait time')
 axP.set_ylabel('frequency')
 figP.savefig(output_path+'/histogram_wait_times_onset.png')
+
 
 #save simulation details and results
 simulation_details = {

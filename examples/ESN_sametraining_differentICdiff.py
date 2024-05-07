@@ -231,7 +231,7 @@ modelsync = EsnForecaster(
 # Plot long-term prediction
 trainlen = n_train
 ts = data[0:trainlen,:]
-IC = np.arange(0, 500, 50)
+IC = np.arange(0, 2000, 100)
 print(IC)
 IC_len = len(IC)
 train_times = time_vals[0:trainlen]
@@ -320,8 +320,12 @@ simulation_details = {
             'use_additive_noise_when_forecasting': use_additive_noise_when_forecasting,
             'use_bias': use_bias,
             'use_b': use_b,
-            'beta': beta
+            'beta': beta,
+            'IC': IC
 }
+
+# Convert dictionary to DataFrame
+df = pd.DataFrame([simulation_details])
 
 # Save DataFrame to CSV
 file_path = output_path1+'/simulation_results.csv'
