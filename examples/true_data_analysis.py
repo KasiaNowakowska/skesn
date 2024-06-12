@@ -76,6 +76,63 @@ KE_threshold = 0.00015
 tvals = np.arange(0,8000,1)
 wait_times = []
 all_times = []
+
+ke_range = (0.00000, 0.00008)
+q_range = (0.285,0.290)
+indices = []
+prev_index = -364
+# Iterate over the indices of the arrays
+for i, (ke_val, q_val) in enumerate(zip(ke, q)):
+    # Check if the current index satisfies the conditions
+    if ke_range[0] <= ke_val <= ke_range[1] and q_range[0] <= q_val <= q_range[1]:
+        # Check if the difference between the current index and the previous index is at least 100
+        if i - prev_index >= 363:
+            indices.append(i)
+            prev_index = i
+
+for t in range(1000):
+    fig,ax = plt.subplots(1, figsize=(8,6))
+    for i in indices:
+        ax.scatter(q[i+t], ke[i+t], marker='.')
+    ax.set_ylim(-0.0001, 0.00035)
+    ax.set_xlim(0.260,0.30)
+    ax.grid()
+    ax.set_xlabel('q')
+    ax.set_ylabel('KE')
+    plt.savefig(output_path+"/phasespace{:05d}.png".format(t))
+    plt.close()
+
+
+
+'''
+fig, ax = plt.subplots(1, figsize=(8,6), tight_layout=True)
+
+def phase_space(test_data_ke, test_data_q, times, ax=ax, fig=fig):
+    if ax is None:
+        fig, ax = plt.subplots(1, figsize=(8, 6), tight_layout=True)
+    plt.grid()
+    s_true = ax.scatter(test_data_q, test_data_ke,
+                            cmap='viridis', marker='.', c=times,
+                            vmin=times[0], vmax=times[-1], label='True')
+    ax.set_xlabel('q')
+    ax.set_ylabel('KE')
+    ax.set_ylim(-0.0001, 0.00035)
+    ax.set_xlim(0.260,0.30)
+    #cbar_true = fig.colorbar(s_true, ax=ax, label='time')
+    #plt.legend()
+
+
+for i in range(1,3000):
+    fig, ax = plt.subplots(1, figsize=(8,6), tight_layout=True)
+    phase_space(ke[:i], q[:i], time_vals[:i], ax=ax, fig=fig)
+    fig.savefig(output_path+"/phasespace{:05d}.png".format(i))
+    plt.close()
+'''
+
+
+
+
+
 '''
 for t_i in tvals:
     
@@ -114,7 +171,7 @@ for t_i in tvals:
     fig.savefig(output_path1+'/onsets{:05d}.png'.format(t_i))
     plt.close()
 '''
-
+'''
 for t in range(tvals[-1]):
         if (ke[t] >= KE_threshold and ke[t-1] < KE_threshold):
             all_times.append(time_vals[t])
@@ -130,7 +187,7 @@ ax.hist(wait_times, bins=20)
 ax.set_xlabel('wait time')
 ax.set_ylabel('frequency')
 fig.savefig(output_path+'/histogram_wait_times_onset.png')
-
+'''
 
 '''
 #phase space
