@@ -17,7 +17,7 @@ sys.path.append('/nobackup/mm17ktn/ENS/skesn/skesn/')
 from math import isclose
 import os
 sys.path.append(os.getcwd())
-print(sys.path)
+#print(sys.path)
 
 import numpy as np
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
@@ -27,6 +27,7 @@ import matplotlib.pyplot as plt
 
 from cross_validation import ValidationBasedOnRollingForecastingOrigin
 from esn_old_adaptations import EsnForecaster
+import evaluation_metrics as em
 
 from scipy.signal import find_peaks
 
@@ -41,156 +42,147 @@ UpdateModes = Enum('UpdateModes', 'synchronization transfer_learning refit')
 input_path = args['--input_path']
 output_path = args['--output_path']
 
-output_path2 = output_path+'/2dboxplots'
+output_path2 = output_path+'/boxplots'
+print(output_path2)
 if not os.path.exists(output_path2):
     os.makedirs(output_path2)
     print('made directory')
+    
+input_path2 = '../data'
 
 #load in data
-ensemble_all_vals_ke  = np.load(input_path+'/ensemble_all_vals_ke.npy')
-ensemble_all_vals_q = np.load(input_path+'/ensemble_all_vals_q.npy')
-test_data_ke = np.load(input_path+'/test_data_ke.npy')
-test_data_q = np.load(input_path+'/test_data_q.npy')
+pred_keIC  = np.load(input_path+'/ensemble_all_vals_ke.npy')
+pred_qIC = np.load(input_path+'/ensemble_all_vals_q.npy')
+true_keIC = np.load(input_path+'/ensemble_test_data_ke.npy')
+true_qIC = np.load(input_path+'/ensemble_test_data_q.npy')
+time_IC = np.load(input_path+'/ensemble_prediction_times.npy')
 
-median_ke = np.median(ensemble_all_vals_ke, axis=1) 
-median_q = np.median(ensemble_all_vals_q, axis=1) 
+allq = np.load(input_path2+'/q.npy')
+allke = np.load(input_path2+'/KE.npy')
 
+q_training = allq[:6000]
+ke_training = allke[:6000]
+time_training = np.arange(5000,11000)
 
-def boxplot_2d(x,y, ax, whis=1.5, choose_color='black'):
-    xlimits = [np.percentile(x, q) for q in (25, 50, 75)]
-    ylimits = [np.percentile(y, q) for q in (25, 50, 75)]
+'''
+IC = np.arange(0, 750, 25)
+gradientske = []
+gradientsq = []
+valueske = []
+valuesq = []
+for i in IC:
+    #print(i)
+    KE_diff = np.diff(allke, 1)
+    q_diff = np.diff(allq, 1)
+    KE_grad = KE_diff[6010+i]
+    q_grad = q_diff[6010+i]
+    valueske.append(allke[6010+i])
+    valuesq.append(allq[6010+i])
+    gradientske.append(KE_grad)
+    gradientsq.append(q_grad)
 
-    ##the box
-    box = Rectangle(
-        (xlimits[0],ylimits[0]),
-        (xlimits[2]-xlimits[0]),
-        (ylimits[2]-ylimits[0]),
-        ec = choose_color,
-        fc = choose_color,
-        zorder=0
-    )
-    ax.add_patch(box)
+valueske = np.array(valueske)
+valuesq = np.array(valuesq)
 
-    ##the x median
-    vline = Line2D(
-        [xlimits[1],xlimits[1]],[ylimits[0],ylimits[2]],
-        color=choose_color,
-        zorder=1
-    )
-    ax.add_line(vline)
+tests, ensembles = 30, 100
+peak_matches = []
+peak_missing_one = []
+within100 = []
+true_peak_time = []
+true_peak_val = []
+mean_peak_time_errors = []
+median_peak_value_errors = []
+ub_error, lb_error = [], []
+for i in range(tests):
+    peak_time_error = []
+    tp = em.true_next_peak(true_keIC[:,i], true_qIC[:,i], time_IC[:,i])
+    true_peak_time.append(tp[1])
+    true_peak_val.append(tp[2])
+    num_peaks_forIC = []
+    next_peak_time_forIC = []
+    next_peak_value_forIC = []
+    for r in range(ensembles):
+        pp = em.pred_next_peak(pred_keIC[:,i,r], pred_qIC[:,i,r], time_IC[:,i])
+        num_peaks_forIC.append(pp[0])
+        next_peak_time_forIC.append(pp[1])
+        next_peak_value_forIC.append(pp[2])
+    counter_all = 0
+    counter_missing_one = 0
+    counter_next_time_within100 = 0
+    for n_p in num_peaks_forIC:
+        if n_p == tp[0]:
+            counter_all += 1
+        elif n_p == tp[0]-1:
+            counter_missing_one += 1
+    fraction_peak_matches = counter_all/ensembles
+    fraction_peaks_missing_one = counter_missing_one/ensembles
+    peak_matches.append(fraction_peak_matches)
+    peak_missing_one.append(fraction_peaks_missing_one)
+    for n_vp in next_peak_time_forIC:
+        er = n_vp - tp[1]
+        peak_time_error.append(er)
+        if abs(n_vp - tp[1]) < 50:
+            counter_next_time_within100 += 1
+    fraction_within100 = counter_next_time_within100/ensembles
+    within100.append(fraction_within100)
 
-    ##the y median
-    hline = Line2D(
-        [xlimits[0],xlimits[2]],[ylimits[1],ylimits[1]],
-        color=choose_color,
-        zorder=1
-    )
-    ax.add_line(hline)
+    median_peak_value = np.median(next_peak_value_forIC)
+    print(median_peak_value)
+    median_peak_value_errors.append(np.abs(tp[2]-median_peak_value))
+    peak_time_error = np.array(peak_time_error)
+    peak_time_error = peak_time_error[np.isfinite(peak_time_error)]
+    mean_peak_time_error = np.median(peak_time_error)
+    lower_bound_time_error = np.percentile(peak_time_error, 10)
+    upper_bound_time_error = np.percentile(peak_time_error, 90)
+    mean_peak_time_errors.append(mean_peak_time_error)
+    ub_error.append(upper_bound_time_error)
+    lb_error.append(lower_bound_time_error)
 
-    ##the central point
-    ax.plot([xlimits[1]],[ylimits[1]], color=choose_color, marker='o')
+tests = 30
+for i in range(tests):
+    fig = plt.figure(constrained_layout=True, figsize=(12, 6))
 
-    ##the x-whisker
-    ##defined as in matplotlib boxplot:
-    ##As a float, determines the reach of the whiskers to the beyond the
-    ##first and third quartiles. In other words, where IQR is the
-    ##interquartile range (Q3-Q1), the upper whisker will extend to
-    ##last datum less than Q3 + whis*IQR). Similarly, the lower whisker
-    ####will extend to the first datum greater than Q1 - whis*IQR. Beyond
-    ##the whiskers, data are considered outliers and are plotted as
-    ##individual points. Set this to an unreasonably high value to force
-    ##the whiskers to show the min and max values. Alternatively, set this
-    ##to an ascending sequence of percentile (e.g., [5, 95]) to set the
-    ##whiskers at specific percentiles of the data. Finally, whis can
-    ##be the string 'range' to force the whiskers to the min and max of
-    ##the data.
-    iqr = xlimits[2]-xlimits[0]
+    # Define the grid for subplots
+    ax1 = plt.subplot2grid((4, 4), (0, 0), colspan=2, rowspan=4)
+    ax2 = plt.subplot2grid((4, 4), (0, 2), colspan=2, rowspan=2)
+    ax3 = plt.subplot2grid((4, 4), (2, 2), colspan=2, rowspan=2, sharex=ax2)
 
-    ##left
-    left = np.min(x[x > xlimits[0]-whis*iqr])
-    whisker_line = Line2D(
-        [left, xlimits[0]], [ylimits[1],ylimits[1]],
-        color = choose_color,
-        zorder = 1
-    )
-    ax.add_line(whisker_line)
-    whisker_bar = Line2D(
-        [left, left], [ylimits[0],ylimits[2]],
-        color = choose_color,
-        zorder = 1
-    )
-    ax.add_line(whisker_bar)
+    em.ensemble_timeseries_plustraining(pred_keIC[:,i,:], pred_qIC[:,i,:], true_keIC[:,i], true_qIC[:,i], ke_training, q_training, time_training, time_IC[:,i], ax=np.array((ax2,ax3)))
+    ax2.scatter(true_peak_time[i], true_peak_val[i])
+    ax2.set_xlim(10000, 14000)
+    ax3.set_xlim(10000, 14000)
+    ax2.set_ylim(-0.0001, 0.00035)
+    ax3.set_ylim(0.260,0.30)
+    ax2.plot(np.arange(11000,14000), allke[6000:9000], color='blue', alpha=0.2, linestyle='--')
+    ax3.plot(np.arange(11000,14000), allq[6000:9000], color='blue', alpha=0.2, linestyle='--')
+    #plt.suptitle('test={:.1f}, gradient ke={:.2e}, gradient q={:.2e}'.format(i+1, gradientske[i], gradientsq[i]))
+    ax1.plot(allq[6010:6010+790],allke[6010:6010+790], linestyle='--', color='red', alpha=0.5)
+    scatter = ax1.scatter(valuesq[:i+1], valueske[:i+1], c=within100[:i+1], cmap='viridis', vmin=0, vmax=1)
+    plt.colorbar(scatter, ax=ax1)
+    ax1.grid()
+    ax1.set_xlabel('q')
+    ax1.set_ylabel('KE')
+    fig.savefig(output_path2+'/image{:03d}.png'.format(i))
+    plt.close()
+    '''
+    
+'''
+ax.plot(q_timeseries[6010:6010+790],ke_timeseries[6010:6010+790], linestyle='--', color='red', alpha=0.5)
+scatter = ax.scatter(valuesq, valueske, c=median_peak_value_errors, cmap='viridis')
+cbar = fig.colorbar(scatter, label='error')
+ax.grid()
+#'ax.set_ylim(-5e-6,5e-6)
+#ax.set_xlim(-0.0003,0.0003)
+ax.set_xlabel('value of q')
+ax.set_ylabel('value of KE')
+'''
 
-    ##right
-    right = np.max(x[x < xlimits[2]+whis*iqr])
-    whisker_line = Line2D(
-        [right, xlimits[2]], [ylimits[1],ylimits[1]],
-        color = choose_color,
-        zorder = 1
-    )
-    ax.add_line(whisker_line)
-    whisker_bar = Line2D(
-        [right, right], [ylimits[0],ylimits[2]],
-        color = choose_color,
-        zorder = 1
-    )
-    ax.add_line(whisker_bar)
-
-    ##the y-whisker
-    iqr = ylimits[2]-ylimits[0]
-
-    ##bottom
-    bottom = np.min(y[y > ylimits[0]-whis*iqr])
-    whisker_line = Line2D(
-        [xlimits[1],xlimits[1]], [bottom, ylimits[0]], 
-        color = choose_color,
-        zorder = 1
-    )
-    ax.add_line(whisker_line)
-    whisker_bar = Line2D(
-        [xlimits[0],xlimits[2]], [bottom, bottom], 
-        color = choose_color,
-        zorder = 1
-    )
-    ax.add_line(whisker_bar)
-
-    ##top
-    top = np.max(y[y < ylimits[2]+whis*iqr])
-    whisker_line = Line2D(
-        [xlimits[1],xlimits[1]], [top, ylimits[2]], 
-        color = choose_color,
-        zorder = 1
-    )
-    ax.add_line(whisker_line)
-    whisker_bar = Line2D(
-        [xlimits[0],xlimits[2]], [top, top], 
-        color = choose_color,
-        zorder = 1
-    )
-    ax.add_line(whisker_bar)
-
-    ##outliers
-    mask = (x<left)|(x>right)|(y<bottom)|(y>top)
-    ax.scatter(
-        x[mask],y[mask],
-        facecolors='none', edgecolors=choose_color,
-    )
-
-from matplotlib.patches import Rectangle
-from matplotlib.lines import Line2D
-fig, axs = plt.subplots(1, figsize=(6,6), tight_layout=True)
-cols = ['blue', 'red', 'green', 'skyblue', 'salmon', 'purple']
-time_slots = np.arange(50,600,50)
-for i in range(len(time_slots)):
-    fig, axs = plt.subplots(1, figsize=(6,6), tight_layout=True)
-    time_slot = time_slots[i]
-    axs.scatter(median_q[:time_slot], median_ke[:time_slot], marker='.', color='black')
-    boxplot_2d(ensemble_all_vals_q[time_slot,:],ensemble_all_vals_ke[time_slot,:], axs, whis=1.5, choose_color=cols[i%len(cols)])
-    axs.set_xlim(0.265, 0.300)
-    axs.set_ylim(0, 3e-4)
-    axs.set_ylabel('KE')
-    axs.set_xlabel('q')
-    fig.savefig(output_path2+'/phasespace_clears{:04d}.png'.format(time_slot))
-
-
-
+FT = np.linspace(0,600,75)
+for i in FT:
+    fig, ax = plt.subplots(1)
+    phase_diagram_boxplot(pred_keIC, pred_qIC, true_keIC, true_qIC, prediction_times, forecast_time=i, ax=ax)
+    ax.scatter(test_data_q[:i], test_data_ke[:i], marker='.', color='tab:blue', label='True')
+    ax.scatter(median_q[:i], median_ke[:i], marker='.', color='orange', label='median')
+    plt.legend()
+    plt.grid()
+    plt.savefig(output_path+'/boxplots%i.png' % i)
