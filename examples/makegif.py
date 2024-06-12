@@ -19,6 +19,7 @@ def create_gif(input_path, output_gif, duration):
     
     # List all files in the image folder
     files = sorted(os.listdir(input_path))
+    print(files)
     
     for file_name in files:
         # Load each image
