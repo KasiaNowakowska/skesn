@@ -228,12 +228,12 @@ modelsync = EsnForecaster(
             beta=beta)
 
 # Plot long-term prediction
-trainlen = n_train
+synclen = n_sync
+trainlen = n_train - synclen
 ts = data[0:trainlen,:]
 train_times = time_vals[0:trainlen]
 dt = time_vals[1] - time_vals[0]
-synclen = n_sync
-predictionlen = n_prediction-synclen
+predictionlen = n_prediction
 future_times = time_vals[trainlen:trainlen+synclen+predictionlen]
 sync_times = time_vals[trainlen:trainlen+synclen]
 prediction_times = time_vals[trainlen+synclen:trainlen+synclen+predictionlen]
