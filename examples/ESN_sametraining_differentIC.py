@@ -162,7 +162,7 @@ use_bias = args['--use_bias']
 use_b = args['--use_b']
 ensembles = int(args['--ensembles'])
 
-data_dir = '/validation_n_reservoir{0:}_spectral_radius{1:}_sparsity{2:}_lambda_r{3:}_beta{4:}_noise{5:}_bias{6:}_b{7:}'.format(args['--n_reservoir'], args['--spectral_radius'], args['--sparsity'], float(args['--lambda_r']), float(args['--beta']), args['--use_noise'], args['--use_bias'], args['--use_b'])
+data_dir = '/validation_n_reservoir{0:}_spectral_radius{1:}_sparsity{2:}_lambda_r{3:}_beta{4:}_noise{5:}_bias{6:}_b{7:}_nsync{8:}_ntrain{9:}'.format(args['--n_reservoir'], args['--spectral_radius'], args['--sparsity'], float(args['--lambda_r']), float(args['--beta']), args['--use_noise'], args['--use_bias'], args['--use_b'], args['--n_sync'], args['--n_train'])
 
 output_path = output_path1+data_dir
 print(output_path)
@@ -229,15 +229,15 @@ modelsync = EsnForecaster(
             beta=beta)
 
 # Plot long-term prediction
-trainlen = n_train
+synclen = n_sync
+trainlen = n_train - synclen
 ts = data[0:trainlen,:]
-IC = np.arange(0, 500, 50)
+IC = np.arange(0, 2250, 25)
 print(IC)
 IC_len = len(IC)
 train_times = time_vals[0:trainlen]
 dt = time_vals[1] - time_vals[0]
-synclen = n_sync
-predictionlen = n_prediction-synclen
+predictionlen = n_prediction
 
 MSE_values_q = []
 MSE_values_ke = []
@@ -300,12 +300,14 @@ for I in range(len(IC)):
         ensemble_all_vals_q[:,I,i] = inverse_prediction[:,1]
         ensemble_test_data_ke[:,I] = inverse_test_data[:,0]
         ensemble_test_data_q[:,I] = inverse_test_data[:,1]
-        
+
+print(output_path)        
 np.save(output_path+'/ensemble_all_vals_ke.npy', ensemble_all_vals_ke)
 np.save(output_path+'/ensemble_all_vals_q.npy', ensemble_all_vals_q)
 np.save(output_path+'/ensemble_test_data_ke.npy', ensemble_test_data_ke)
 np.save(output_path+'/ensemble_test_data_q.npy', ensemble_test_data_q)
 np.save(output_path+'/ensemble_prediction_times.npy', ensemble_prediction_times)
+print('arrays saved')
 
 #save simulation details and results
 simulation_details = {
@@ -322,11 +324,6 @@ simulation_details = {
             'use_b': use_b,
             'beta': beta
 }
-
-# Save DataFrame to CSV
-file_path = output_path1+'/simulation_results.csv'
-with open(file_path, 'a', newline='') as f:
-    df.to_csv(f, header=f.tell()==0, index=False) 
 
 # Save hyperparameters to a text file
 with open(output_path+'/esn_hyperparameters.txt', 'w') as f:
