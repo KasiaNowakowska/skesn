@@ -28,10 +28,11 @@ from scipy.signal import find_peaks
 import h5py
 
 from docopt import docopt
-args = docopt(__doc__)
 
 from enum import Enum
 UpdateModes = Enum('UpdateModes', 'synchronization transfer_learning refit')
+
+fig, ax = plt.subplots(1)
 
 def boxplot_2d(x,y, ax, whis=1.5, choose_color='black'):
     xlimits = [np.percentile(x, q) for q in (25, 50, 75)]
@@ -43,7 +44,7 @@ def boxplot_2d(x,y, ax, whis=1.5, choose_color='black'):
         (xlimits[2]-xlimits[0]),
         (ylimits[2]-ylimits[0]),
         ec = choose_color,
-        fc = choose_color,
+        fc = 'none',
         zorder=0
     )
     ax.add_patch(box)
@@ -224,7 +225,7 @@ def ensemble_timeseries_plustraining(ensemble_all_vals_ke, ensemble_all_vals_q, 
                                 label='Median Prediction', color='orange')
     ax[1].fill_between(prediction_times, lower_bound_q, upper_bound_q, color='orange', alpha=0.3, label='80% Confidence Interval')
     ax[0].plot(prediction_times, test_data_ke, linewidth=2,
-                                label='True', color='tab:blue')    
+                                label='True', color='tab:blue')
     ax[1].plot(prediction_times, test_data_q, linewidth=2,
                                 label='True', color='tab:blue')
     plt.legend()
@@ -328,10 +329,47 @@ def pdfs(ensemble_all_vals_ke, ensemble_all_vals_q, test_data_ke, test_data_q, p
 def phase_diagram_boxplot(ensemble_all_vals_ke, ensemble_all_vals_q, test_data_ke, test_data_q, prediction_times, forecast_time=50, ax=ax):
     median_ke = np.median(ensemble_all_vals_ke, axis=1) 
     median_q = np.median(ensemble_all_vals_q, axis=1) 
-    ax.scatter(median_q[:forecast_time], median_ke[:forecast_time], marker='.', color='black')
+    #ax.scatter(median_q[:forecast_time], median_ke[:forecast_time], marker='.', color='black')
     boxplot_2d(ensemble_all_vals_q[forecast_time,:],ensemble_all_vals_ke[forecast_time,:], ax, whis=1.5, choose_color='red')
     ax.set_xlim(0.265, 0.300)
     ax.set_ylim(0, 3e-4)
     ax.set_ylabel('KE')
     ax.set_xlabel('q')
 
+def true_next_peak(test_data_ke, test_data_q, prediction_times):
+    # set thresholds
+    threshold = 0.00005
+    distance = 10
+    prominence = 0.000025
+
+    peaks_true, _ = find_peaks(test_data_ke, height=threshold, distance=distance, prominence = prominence)
+    num_true_peaks = len(peaks_true)
+    print(prediction_times[peaks_true])
+    true_next_peak_time = prediction_times[peaks_true[0]] #records time of next peak
+    true_next_peak_value = test_data_ke[peaks_true[0]]
+    print(num_true_peaks, true_next_peak_time, true_next_peak_value)
+
+    return num_true_peaks, true_next_peak_time, true_next_peak_value
+    
+def pred_next_peak(pred_ke, pred_q, prediction_times):
+    # set thresholds
+    threshold = 0.00005
+    distance = 10
+    prominence = 0.000025
+
+    peaks_pred, _ = find_peaks(pred_ke, height=threshold, distance=distance, prominence = prominence)
+    num_pred_peaks = len(peaks_pred)
+    if num_pred_peaks > 0:
+        pred_next_peak_time = prediction_times[peaks_pred[0]]
+        pred_next_peak_value = pred_ke[peaks_pred[0]]
+    else:
+        #print('no peaks recorded')
+        pred_next_peak_time = np.inf #no peak so set the next peak super far in advance so its not recorded
+        pred_next_peak_value = np.NaN
+
+    return num_pred_peaks, pred_next_peak_time, pred_next_peak_value
+
+def peaks_plot(test_data_ke, test_data_q, prediction_times, ax=ax):
+    tp = true_next_peak(test_data_ke, test_data_q, prediction_times)
+    #print(tp[1], tp[2])
+    ax[0].scatter(tp[1], tp[2])
