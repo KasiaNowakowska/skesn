@@ -142,7 +142,7 @@ threshold = 1 - 1/np.exp(1)  # 1 - 1/e is approximately 0.632
 # Find the first lag where autocorrelation drops below the threshold
 J_value = np.where(autocorr < threshold)[0][0]
 
-
+'''
 ### m investigation ####
 m_0 = np.arange(2,20,1)
 t_end = 200
@@ -189,6 +189,159 @@ for N in range(len(x_obs_index)):
   dist[N,:] = mean_log_distance
 
   np.save(output_path+'/mean_log_distances.npy', dist)
+
+#### nonglobal RB points investigation ####
+x_positions = np.arange(32,256,32)
+z_positions = np.arange(16,64,16)
+t_end = 200
+time_steps = 300
+dist = np.zeros((len(x_positions)*len(z_positions), t_end+1))
+time_innovation = np.arange(t_end + 1)
+time_values = time_innovation*dt
+np.save(output_path+'/time_values.npy', time_values)
+conuter = 0
+for xi in range(len(x_positions)):
+  for zi in range(len(z_positions)):
+    w_point = w[:,xi,zi]
+    x_obs = w_point
+
+    # Compute the autocorrelation function
+    autocorr_result = np.correlate(x_obs-np.mean(x_obs), x_obs-np.mean(x_obs), mode='full')
+    autocorr = autocorr_result[len(autocorr_result) // 2:]
+    autocorr /= autocorr[0] #normalise by autocorrelation at lag 0
+
+
+    # Find the lag (embedding delay) where the autocorrelation drops below 1 - 1/e of its initial value
+    threshold = 1 - 1/np.exp(1)  # 1 - 1/e is approximately 0.632
+
+    # Find the first lag where autocorrelation drops below the threshold
+    J_value = np.where(autocorr < threshold)[0][0]
+    J = J_value
+    m = 8
+    print('N=', len(x_obs))
+    time_innovation, mean_log_distance, distance_log_i, X = lyap(x_obs, J, m, t_end, time_steps)
+    dist[counter,:] = mean_log_distance
+    counter += 1
+
+  np.save(output_path+'/mean_log_distances.npy', dist)
+'''
+##### CP4 Data ######
+
+# functions
+def hours_to_custom_datetime(hours):
+    # Constants
+    hours_per_day = 24
+    days_per_month = 30
+    months_per_year = 12
+    days_per_year = 360
+
+    # Calculate total days and remaining hours
+    total_days = hours // hours_per_day
+    remaining_hours = hours % hours_per_day
+    #print(total_days, remaining_hours)
+
+    # Calculate the year
+    year = total_days // days_per_year
+    remaining_days = total_days % days_per_year
+    #print(year, remaining_days)
+
+    # Calculate the month
+    month = remaining_days // days_per_month
+    day = remaining_days % days_per_month
+
+    # Adjust month and year for 0-based index
+    month += 1
+    day += 1
+    year += 1970
+
+    return year, month, day, remaining_hours
+
+def convert_custom_to_datetime(years, months, days, hours):
+    datetime_strings = ["{:04d}-{:02d}-{:02d} {:02d}:00:00".format(y, m, d, h)
+                    for y, m, d, h in zip(years, months, days, hours)]
+    return datetime_strings
+
+#load in CP4 data
+file_path='../data/CP4data/data_R25_C_c30404_NIM.txt'
+data = pd.read_csv(file_path, header=None, names=['Hours', 'TCW'])
+file_path2='../data/CP4data/data_CP4_regridded_C_a04203_NIM.txt'
+data2 = pd.read_csv(file_path2, header=None, names=['Hours', 'precip'])
+
+data['precip'] = data2['precip']
+
+#plot TCW and precip against hours
+TCW = np.array(data['TCW'])
+Hours = np.array(data['Hours'])
+precip = np.array(data['precip'])
+fig, ax = plt.subplots(2, figsize=(12,6), sharex=True)
+ax[0].plot(Hours, TCW)
+ax[1].plot(Hours, precip)
+ax[0].set_ylabel('TCW')
+ax[1].set_ylabel('precip')
+ax[1].set_xlabel('Hours from 1970-01-01 00:00')
+
+CorrectTimeCP4 = np.zeros((4, len(Hours)), dtype=int)
+CorrectTimeCP4[:,:] = hours_to_custom_datetime(Hours)
+Time = convert_custom_to_datetime(CorrectTimeCP4[0,:], CorrectTimeCP4[1,:], CorrectTimeCP4[2,:], CorrectTimeCP4[3,:])
+
+Year_in_Hours = 360*24
+Month_in_hours = 30*24
+
+#plot TCW and precip against yearly dates
+fig, ax =plt.subplots(2, figsize=(12,6), tight_layout=True, sharex=True)
+ax[0].plot(Hours, TCW)
+ax[1].plot(Hours, precip)
+ax[1].set_xlabel('Time')
+ax[0].set_ylabel('TCW')
+ax[1].set_ylabel('precip')
+ax[0].grid()
+ax[1].grid()
+
+step = Year_in_Hours
+
+tick_positions = Hours[::step]
+tick_labels = Time[::step]
+ax[1].set_xticks(tick_positions, tick_labels, rotation=90)
+
+#choose domain size
+y = 6
+m= 0
+Index_start = Year_in_Hours * y + Month_in_hours * m
+Index_end = Year_in_Hours * (y+1) + Month_in_hours * (m)
+print('start and end times:')
+print(Time[Index_start], Time[Index_end])
+
+x_obs = TCW[Index_start:Index_end]
+
+### to find J ###
+# Compute the autocorrelation function
+autocorr_result = np.correlate(x_obs-np.mean(x_obs), x_obs-np.mean(x_obs), mode='full')
+autocorr = autocorr_result[len(autocorr_result) // 2:]
+autocorr /= autocorr[0] #normalise by autocorrelation at lag 0
+
+
+# Find the lag (embedding delay) where the autocorrelation drops below 1 - 1/e of its initial value
+threshold = 1 - 1/np.exp(1)  # 1 - 1/e is approximately 0.632
+
+# Find the first lag where autocorrelation drops below the threshold
+J_value = np.where(autocorr < threshold)[0][0]
+
+m_0 = np.arange(2,20,1)
+t_end = 100
+time_steps = 200
+dist = np.zeros((len(m_0), t_end+1))
+time_innovation = np.arange(t_end + 1)
+time_values = time_innovation*1
+np.save(output_path+'/time_values.npy', time_values)
+for m0 in range(len(m_0)):
+  J = J_value
+  m = m_0[m0]
+  print('m=', m)
+  time_innovation, mean_log_distance, distance_log_i, X = lyap(x_obs, J, m, t_end, time_steps)
+  dist[m0,:] = mean_log_distance
+
+  np.save(output_path+'/mean_log_distances.npy', dist)
+
 
 '''
 ###### OLDER STUFF ####
