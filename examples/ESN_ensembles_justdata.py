@@ -50,75 +50,6 @@ args = docopt(__doc__)
 
 from enum import Enum
 UpdateModes = Enum('UpdateModes', 'synchronization transfer_learning refit')
-
-#Define functions
-def calculate_nrmse(predictions, true_values):
-    """
-    Calculate the Normalized Root Mean Square Error (NRMSE) between predicted and true values using the range for normalisation.
-  
-    Args:
-    predictions: numpy array or list containing predicted values
-    true_values: numpy array or list containing true values
-  
-    Returns:
-    nrmse: Normalized Root Mean Square Error (float)
-    """
-    # Ensure inputs are numpy arrays
-    predictions = np.array(predictions)
-    true_values = np.array(true_values)
-  
-    # Calculate RMSE
-    rmse = np.sqrt(np.mean((predictions - true_values) ** 2))
-  
-    # Calculate range of true values
-    value_range = np.max(true_values) - np.min(true_values)
-  
-    # Calculate NRMSE
-    nrmse = rmse / value_range
-  
-    return nrmse
-    
-def calculate_mse(predictions, true_values):
-    """
-    Calculate the Mean Square Error (MSE) between predicted and true values.
-  
-    Args:
-    predictions: numpy array or list containing predicted values
-    true_values: numpy array or list containing true values
-  
-    Returns:
-    mse: Mean Square Error (float)
-    """
-    # Ensure inputs are numpy arrays
-    predictions = np.array(predictions)
-    true_values = np.array(true_values)
-  
-    # Calculate MSE
-    mse = np.mean((predictions - true_values) ** 2)
-  
-    return mse
-
-def fftinx(variable, x1):
-    variable = variable - np.mean(variable)
-    window = np.hanning(len(variable))
-    windowed_signal = variable * window
-    fs = len(x1)/(x1[-1]-x1[0])
-    end = x1[-1]
-    start = x1[0]
-    fft = np.fft.fft(windowed_signal, len(x1))
-    fft = np.fft.fftshift(fft)
-    freq = np.fft.fftfreq(len(fft), d=(end-start)/len(x1))
-    freq = np.fft.fftshift(freq)
-    freq = 2*np.pi*freq
-    magnitude = np.abs(fft)
-    psd = magnitude**2
-    #print(psd)
-    return psd, freq, fft
-
-def timedelay(y_true, y_pred):
-    cross_corr = np.correlate(y_true, y_pred, mode='full')
-    lag_max_corr = np.argmax(cross_corr) - len(y_true) + 1
-    return lag_max_corr
     
 input_path = args['--input_path']
 output_path1 = args['--output_path']
@@ -142,26 +73,6 @@ output_path = output_path1+data_dir
 print(output_path)
 if not os.path.exists(output_path):
     os.makedirs(output_path)
-    print('made directory')
-
-images_output_path = output_path+'/images'
-if not os.path.exists(images_output_path):
-    os.makedirs(images_output_path)
-    print('made directory')
-
-images_output_path2 = output_path+'/phasespace'
-if not os.path.exists(images_output_path2):
-    os.makedirs(images_output_path2)
-    print('made directory')
-
-images_output_path3 = output_path+'/peakspath'
-if not os.path.exists(images_output_path3):
-    os.makedirs(images_output_path3)
-    print('made directory')
-
-output_path_2 = output_path+'/withtime'
-if not os.path.exists(output_path_2):
-    os.makedirs(output_path_2)
     print('made directory')
 
 #load in data
@@ -256,72 +167,5 @@ for i in range(ensembles):
 print(np.shape(ensemble_all_vals))
 np.save(output_path+'/ensemble%i_all_vals.npy' % ensembles, ensemble_all_vals)
 
-ensemble_mean_ke = np.mean(ensemble_all_vals_ke, axis=1)
-ensemble_mean_q = np.mean(ensemble_all_vals_q, axis=1)
-ensemble_var_ke = np.var(ensemble_all_vals_ke, axis=1)
-ensemble_var_q = np.var(ensemble_all_vals_q, axis=1)
-max_var_ke = np.max(ensemble_var_ke)
-max_var_q = np.max(ensemble_var_q)
 
-median_ke = np.median(ensemble_all_vals_ke, axis=1) 
-median_q = np.median(ensemble_all_vals_q, axis=1) 
-lower_bound_ke = np.percentile(ensemble_all_vals_ke, 10, axis=1)
-upper_bound_ke = np.percentile(ensemble_all_vals_ke, 90, axis=1)
-lower_bound_q = np.percentile(ensemble_all_vals_q, 10, axis=1)
-upper_bound_q = np.percentile(ensemble_all_vals_q, 90, axis=1)
 
-# creating grid for subplots
-fig = plt.figure(constrained_layout=True)
-fig.set_figheight(12)
-fig.set_figwidth(12)
-
-ax1 = plt.subplot2grid(shape=(8, 8), loc=(0, 0), colspan=4, rowspan=4)
-ax21 = plt.subplot2grid(shape=(8, 8), loc=(4, 0), colspan=4, rowspan=2)
-ax22 = plt.subplot2grid(shape=(8, 8), loc=(6, 0), colspan=4, rowspan=2, sharex=ax21)
-ax2 = plt.subplot2grid(shape=(8, 8), loc=(0, 4), colspan=4, rowspan=2)
-ax3 = plt.subplot2grid(shape=(8, 8), loc=(2, 4), colspan=4, rowspan=2, sharex=ax2)
-ax4 = plt.subplot2grid(shape=(8, 8), loc=(4, 4), colspan=4, rowspan=2, sharex=ax2)
-ax5 = plt.subplot2grid(shape=(8, 8), loc=(6, 4), colspan=4, rowspan=2, sharex=ax2)
-
-for tvalue in range(len(prediction_times)):
-    if tvalue != 0:
-        if tvalue % 50 == 0:
-            ax21.plot(train_times, inverse_training_data[:, 0], color='blue', alpha=0.5)
-            ax21.plot(future_times, inverse_future_data[:, 0], color='blue', alpha=0.5)
-            ax22.plot(train_times, inverse_training_data[:, 1], color='blue', alpha=0.5)
-            ax22.plot(future_times, inverse_future_data[:, 1], color='blue', alpha=0.5)
-            for member in range(ensembles):
-                if member % 10 == 0:
-                    inverse_prediction = ensemble_all_vals[:tvalue,:,member]
-                    ax1.scatter(inverse_prediction[:,1], inverse_prediction[:,0])
-                    ax21.plot(prediction_times[:tvalue], inverse_prediction[:,0], linewidth=2, label='Prediction')
-                    ax22.plot(prediction_times[:tvalue], inverse_prediction[:,1], linewidth=2, label='Prediction')
-            ax2.plot(train_times, inverse_training_data[:, 0], color='blue', alpha=0.5)
-            ax2.plot(future_times, inverse_future_data[:, 0], color='blue', alpha=0.5)
-            ax3.plot(train_times, inverse_training_data[:, 1], color='blue', alpha=0.5) 
-            ax3.plot(future_times, inverse_future_data[:, 1], color='blue', alpha=0.5)
-            ax2.plot(prediction_times[:tvalue], median_ke[:tvalue], linewidth=2, label='Median Prediction', color='green')
-            ax3.plot(prediction_times[:tvalue], median_q[:tvalue], linewidth=2, label='Median Prediction', color='green')
-            ax2.fill_between(prediction_times[:tvalue], lower_bound_ke[:tvalue], upper_bound_ke[:tvalue], color='green', alpha=0.3, label='80% Confidence Interval')
-            ax3.fill_between(prediction_times[:tvalue], lower_bound_q[:tvalue], upper_bound_q[:tvalue], color='green', alpha=0.3, label='80% Confidence Interval')
-            ax4.plot(prediction_times[:tvalue], ensemble_var_ke[:tvalue])
-            ax5.plot(prediction_times[:tvalue], ensemble_var_q[:tvalue])
-            ax1.set_xlabel('q')
-            ax1.set_ylabel('KE')
-            ax2.set_ylabel('median KE')
-            ax3.set_ylabel('median q')
-            ax4.set_ylabel('variation KE')
-            ax5.set_ylabel('variation q')
-            ax21.set_ylabel('KE')
-            ax22.set_ylabel('q')
-            ax22.set_xlabel('time')
-            ax1.set_xlim(0.265, 0.300)
-            ax1.set_ylim(0, 3e-4)
-            ax2.set_xlim(4000,12000)
-            ax3.set_xlim(4000,12000)
-            ax4.set_xlim(4000,12000)
-            ax4.set_ylim(0,max_var_ke)
-            ax5.set_xlim(4000,12000)
-            ax5.set_ylim(0,max_var_q)
-            fig.savefig(output_path_2+'/image%i.png' % tvalue)
-        plt.close()
