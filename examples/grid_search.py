@@ -233,14 +233,14 @@ def grid_search_SSV_retrained(forecaster, param_grid, data, time_vals, ensembles
             inverse_future_data = ss.inverse_transform(future_data) #this include the sync data
 
             ### ensemble mean ###
-            ensemble_all_vals_ke[:,i] = inverse_prediction[:,0]
-            ensemble_all_vals_q[:,i] = inverse_prediction[:,1]
-            ensemble_all_vals[:, 0, i] = inverse_prediction[:,0]
-            ensemble_all_vals[:, 1, i] = inverse_prediction[:,1]
+            ensemble_all_vals_ke[:,i] = future_predictionsync[:,0]
+            ensemble_all_vals_q[:,i] = future_predictionsync[:,1]
+            ensemble_all_vals[:, 0, i] = future_predictionsync[:,0]
+            ensemble_all_vals[:, 1, i] = future_predictionsync[:,1]
 
-            mse = MSE(ensemble_all_vals[:,:,i], inverse_test_data[:,:])
+            mse = MSE(ensemble_all_vals[:,:,i], test_data[:,:])
             MSE_ens[i] = mse
-            ph = prediction_horizon(ensemble_all_vals[:,:,i], inverse_test_data[:,:], threshold = 0.05)
+            ph = prediction_horizon(ensemble_all_vals[:,:,i], test_data[:,:], threshold = 0.1)
             PH_ens[i] = ph
 
         MSE_params[counter,:] = MSE_ens
@@ -306,14 +306,14 @@ def grid_search_SSV(forecaster, param_grid, data, time_vals, ensembles, n_predic
             inverse_future_data = ss.inverse_transform(future_data) #this include the sync data
 
             ### ensemble mean ###
-            ensemble_all_vals_ke[:,i] = inverse_prediction[:,0]
-            ensemble_all_vals_q[:,i] = inverse_prediction[:,1]
-            ensemble_all_vals[:, 0, i] = inverse_prediction[:,0]
-            ensemble_all_vals[:, 1, i] = inverse_prediction[:,1]
+            ensemble_all_vals_ke[:,i] = future_predictionsync[:,0]
+            ensemble_all_vals_q[:,i] = future_predictionsync[:,1]
+            ensemble_all_vals[:, 0, i] = future_predictionsync[:,0]
+            ensemble_all_vals[:, 1, i] = future_predictionsync[:,1]
 
-            mse = MSE(ensemble_all_vals[:,:,i], inverse_test_data[:,:])
+            mse = MSE(ensemble_all_vals[:,:,i], test_data[:,:])
             MSE_ens[i] = mse
-            ph = prediction_horizon(ensemble_all_vals[:,:,i], inverse_test_data[:,:], threshold = 1e-2)
+            ph = prediction_horizon(ensemble_all_vals[:,:,i], test_data[:,:], threshold = 1e-2)
             PH_ens[i] = ph
 
         MSE_params[counter,:] = MSE_ens
@@ -334,7 +334,7 @@ df = pd.DataFrame(param_combinations, columns=param_labels)
 
 print(df)
 
-MSE_params, PH_params, prediction_data = grid_search_SSV_retrained(EsnForecaster, param_grid, data, time_vals, ensembles, n_prediction, trainlen, synclen)
+MSE_params, PH_params, prediction_data = grid_search_SSV(EsnForecaster, param_grid, data, time_vals, ensembles, n_prediction, trainlen, synclen)
 
 np.save(output_path+'/prediction_data.npy', prediction_data)
 
