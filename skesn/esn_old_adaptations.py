@@ -4,6 +4,7 @@ from tqdm import tqdm
 from base import BaseForecaster
 from misc import correct_dimensions, identity
 from weight_generators import standart_weights_generator, standart_weights_generator_withb
+import matplotlib.pyplot as plt
 
 from enum import Enum
 
@@ -91,7 +92,8 @@ class EsnForecaster(BaseForecaster):
                  use_b=False,
                  use_bias=True,
                  use_r_bias=False,
-                 beta=0.001):
+                 beta=0.001,
+                 input_scaling=1.00):
         self.n_reservoir = n_reservoir
         self.spectral_radius = spectral_radius
         self.sparsity = sparsity
@@ -108,6 +110,7 @@ class EsnForecaster(BaseForecaster):
         self.use_b = use_b
         self.use_r_bias = use_r_bias
         self.beta = beta
+        self.input_scaling = input_scaling
         
         # the given random_state might be either an actual RandomState object,
         # a seed or None (in which case we use numpy's builtin RandomState)
@@ -141,7 +144,7 @@ class EsnForecaster(BaseForecaster):
 
     def _fit(self, y, X=None,
              initialization_strategy=standart_weights_generator_withb,
-             inspect=True):
+             inspect=False):
         """Fit forecaster to training data. Overloaded method from
         BaseForecaster.
         Generates random recurrent matrix weights and fits the readout weights
@@ -178,10 +181,11 @@ class EsnForecaster(BaseForecaster):
                                     self.sparsity,
                                     self.spectral_radius,
                                     endo_states,
-                                    exo_states=exo_states)
+                                    exo_states=exo_states,
+                                    input_scaling=self.input_scaling)
         return self._update_via_refit(endo_states, exo_states, inspect)
 
-    def _predict(self, n_timesteps, X=None, inspect=True):
+    def _predict(self, n_timesteps, X=None, inspect=False):
         """Forecast time series at further time steps.
 
         State required:
@@ -216,6 +220,8 @@ class EsnForecaster(BaseForecaster):
                 raise ValueError('No way to deduce the number of time steps: both n_timesteps and X are set to None')
         n_endo = self.last_endo_state_.shape[0]
         n_reservoir = self.last_reservoir_state_.shape[0]
+        means = np.zeros((n_timesteps))
+        std_devs = np.zeros((n_timesteps))
 
         endo_states = np.vstack([self.last_endo_state_,
                                  np.zeros((n_timesteps, n_endo))])
@@ -223,13 +229,13 @@ class EsnForecaster(BaseForecaster):
                                       np.zeros((n_timesteps, n_reservoir))])
         if self.use_r_bias:
                 ones = np.ones(1)
-                print(np.shape(self.last_reservoir_state_))
-                print(np.shape(ones))
+                #print(np.shape(self.last_reservoir_state_))
+                #print(np.shape(ones))
                 last_res_state_bias = np.concatenate((self.last_reservoir_state_, ones))
                 reservoir_states_bias = np.vstack([last_res_state_bias,
                                       np.zeros((n_timesteps, n_reservoir+1))])
                 reservoir_states_bias[:, -1] = 1
-                print('res_states_bias shape', np.shape(reservoir_states_bias))
+                #print('res_states_bias shape', np.shape(reservoir_states_bias))
         
         print('prediction..')
         print('endo states shape', np.shape(endo_states))
@@ -241,6 +247,8 @@ class EsnForecaster(BaseForecaster):
             reservoir_state = reservoir_states[n, :]
             endo_state = endo_states[n, :]
             exo_state = None
+            means[n] = np.mean(reservoir_state)
+            std_devs[n] = np.std(reservoir_state)
             if exo_states is None:
                 exo_state = None
             elif isinstance(exo_states, np.ndarray):
@@ -265,9 +273,14 @@ class EsnForecaster(BaseForecaster):
                 endo_states[n + 1, 0] = 1  # bias changed from 1
             if inspect:
                 pbar.update(1)
-            print(endo_states[n+1,:])
+            #print(endo_states[n+1,:])
+        
         if inspect:
             pbar.close()
+            fig, ax = plt.subplots(1, 2, figsize=(10,10))
+            ax[0].plot(np.arange(0, n_timesteps), means)
+            ax[1].plot(np.arange(0, n_timesteps), std_devs)
+            plt.show()
         if self.use_bias:
             return endo_states[1:, 1:]
         else:
@@ -307,7 +320,7 @@ class EsnForecaster(BaseForecaster):
                 self._treat_dimensions_and_bias(y, X, representation='3D')
             return self._update_via_refit(endo_states, exo_states, **kwargs)
 
-    def _update_via_refit(self, endo_states, exo_states=None, inspect=True):
+    def _update_via_refit(self, endo_states, exo_states=None, inspect=False):
         """Refit forecaster to training data. 
         The model can be fitted based on a single time series (batch_size == 1)
         or a sequence of disconnected time series (batch_size > 1).
@@ -336,7 +349,9 @@ class EsnForecaster(BaseForecaster):
         """
         n_batches = endo_states.shape[0]
         n_timesteps = endo_states.shape[1]
-        reservoir_states = np.zeros((n_batches, n_timesteps, self.n_reservoir))
+        reservoir_states = np.random.rand(n_batches, n_timesteps, self.n_reservoir) * 2 -1 ###changed from 0
+        means_train = np.zeros((n_batches*n_timesteps))
+        std_devs_train = np.zeros((n_batches*n_timesteps))
 
         if inspect:
             print("fitting...")
@@ -355,6 +370,8 @@ class EsnForecaster(BaseForecaster):
                         self._iterate_reservoir_state(reservoir_states[b, n - 1,],
                                                       endo_states[b, n - 1, :],
                                                       exo_states[b, n, :])
+                means_train[n] = np.mean(reservoir_states[b,n,:])
+                std_devs_train[n] = np.std(reservoir_states[b,n,:])
                 if inspect:
                     pbar.update(1)
         if inspect:
@@ -379,8 +396,8 @@ class EsnForecaster(BaseForecaster):
             if self.use_r_bias:
                 idenmat = self.beta * np.identity(self.n_reservoir+1)
             else:
-                idenmat = self.beta * np.identity(self.n_reservoir)
-            print('shape idnetity matrix', np.shape(idenmat))
+                idenmat = self.lambda_r * np.identity(self.n_reservoir)
+            print('shape identity matrix', np.shape(idenmat))
             print('shape res', np.shape(reservoir_states))
             U = np.dot(reservoir_states.T, reservoir_states) + idenmat
             self.W_out_ = np.linalg.solve(U, reservoir_states.T @ endo_states).T
@@ -393,6 +410,11 @@ class EsnForecaster(BaseForecaster):
         # remember the last state for later:
         self.last_reservoir_state_ = reservoir_states[-1, :]
         self.last_endo_state_ = endo_states[-1, :]
+        if inspect:
+            fig1, ax1 = plt.subplots(1,2, figsize=(10,10))
+            ax1[0].plot(np.arange(0, n_timesteps), means_train)
+            ax1[1].plot(np.arange(0, n_timesteps), std_devs_train)
+            plt.show()
         if exo_states is None:
             self.last_exo_state_ = 0
         else:
@@ -422,7 +444,7 @@ class EsnForecaster(BaseForecaster):
         endo_states, exo_states = \
             self._treat_dimensions_and_bias(y, X, representation='2D')
         n_timesteps = y.shape[0]
-        reservoir_states = np.zeros((n_timesteps, self.n_reservoir))
+        reservoir_states = np.random.rand(n_timesteps, self.n_reservoir)* 2 -1
         for n in range(1, n_timesteps):
             if X is None:
                 reservoir_states[n, :] = \
@@ -560,3 +582,4 @@ class EsnForecaster(BaseForecaster):
                                          axis=-1)
         print("shape of endo states after bias", np.shape(endo_states))
         return endo_states, exo_states
+

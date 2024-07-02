@@ -4,11 +4,11 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 
-def standart_weights_generator(random_state, n_reservoir: int, sparsity: float, spectral_radius: float, endo_states: np.ndarray, exo_states: any):
+def standart_weights_generator(random_state, n_reservoir: int, sparsity: float, spectral_radius: float, endo_states: np.ndarray,  input_scaling: float, exo_states: any):
     n_endo = endo_states.shape[2]
     n_exo = 0 if exo_states is None else exo_states.shape[-1]
 
-    W_in = random_state.rand(n_reservoir, n_endo) * 2 - 1
+    W_in = (random_state.rand(n_reservoir, n_endo) * 2 - 1) * input_scaling
 
     # initialize recurrent weights:
     # begin with a random matrix centered around zero:
@@ -24,12 +24,12 @@ def standart_weights_generator(random_state, n_reservoir: int, sparsity: float, 
     if n_exo > 0:
         W_c = random_state.rand(n_reservoir, n_exo) * 2 - 1
     return W_in, W, W_c
-
-def standart_weights_generator_withb(random_state, n_reservoir: int, sparsity: float, spectral_radius: float, endo_states: np.ndarray, exo_states: any):
+    
+def standart_weights_generator_withb(random_state, n_reservoir: int, sparsity: float, spectral_radius: float, endo_states: np.ndarray,  input_scaling: float, exo_states: any):
     n_endo = endo_states.shape[2]
     n_exo = 0 if exo_states is None else exo_states.shape[-1]
 
-    W_in = random_state.rand(n_reservoir, n_endo) * 2 - 1
+    W_in = (random_state.rand(n_reservoir, n_endo) * 2 - 1) * input_scaling
 
     # initialize recurrent weights:
     # begin with a random matrix centered around zero:
