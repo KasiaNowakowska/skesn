@@ -92,7 +92,6 @@ class EsnForecaster(BaseForecaster):
                  use_b=False,
                  use_bias=True,
                  use_r_bias=False,
-                 beta=0.001,
                  input_scaling=1.00):
         self.n_reservoir = n_reservoir
         self.spectral_radius = spectral_radius
@@ -109,7 +108,6 @@ class EsnForecaster(BaseForecaster):
         self.use_bias = use_bias
         self.use_b = use_b
         self.use_r_bias = use_r_bias
-        self.beta = beta
         self.input_scaling = input_scaling
         
         # the given random_state might be either an actual RandomState object,
@@ -392,9 +390,8 @@ class EsnForecaster(BaseForecaster):
         if inspect:
             print("solving...")
         if self.regularization == 'l2':
-            print('beta=', self.beta)
             if self.use_r_bias:
-                idenmat = self.beta * np.identity(self.n_reservoir+1)
+                idenmat = self.lambda_r * np.identity(self.n_reservoir+1)
             else:
                 idenmat = self.lambda_r * np.identity(self.n_reservoir)
             print('shape identity matrix', np.shape(idenmat))
