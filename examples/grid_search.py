@@ -1,7 +1,7 @@
 """
 python script for ESN grid search.
 
-Usage: ESN.py [--input_path=<input_path> --output_path=<output_path> --n_train=<n_train> --n_sync=<n_sync> --n_prediction=<n_prediction> --synchronisation=<synchronisation> --n_reservoir=<n_reservoir> --spectral_radius=<spectral_radius> --sparsity=<sparsity> --lambda_r=<lambda_r> --beta=<beta> --use_noise=<use_noise> --use_bias=<use_bias> --use_b=<use_b> --ensembles=<ensembles>]
+Usage: ESN.py [--input_path=<input_path> --output_path=<output_path> --n_train=<n_train> --n_sync=<n_sync> --n_prediction=<n_prediction> --synchronisation=<synchronisation> --n_reservoir=<n_reservoir> --spectral_radius=<spectral_radius> --sparsity=<sparsity> --lambda_r=<lambda_r> --beta=<beta> --use_noise=<use_noise> --use_bias=<use_bias> --use_b=<use_b> --input_scaling=<input_scaling> --ensembles=<ensembles>]
 
 Options:
     --input_path=<input_path>          file path to use for data
@@ -18,6 +18,7 @@ Options:
     --use_noise=<use_noise>            turn noise on in update equation [default: True]
     --use_bias=<use_bias>              turn bias term on in u adds nother dimension to input [default: True]
     --use_b=<use_b>                    turn on extra bias term in actoiivation function [default: True] 
+    --input_scaling=<input_sclaing>    input scaling, sigma, so input weights are randomly generated between [-sigma, sigma] [default: 1]
     --ensembles=<ensembles>            number of ensembles/how many times to rerun the ESN with the same IC and no retraining
 """
 
@@ -56,6 +57,7 @@ UpdateModes = Enum('UpdateModes', 'synchronization transfer_learning refit')
 
 #Define functions
 def PH_error(predictions, true_values):
+    "input predictions, true_values as (time, variables)"
     variables = predictions.shape[1]
     numerator = np.zeros((predictions.shape[0]))
     norm = np.zeros((predictions.shape[0]))
@@ -123,6 +125,7 @@ beta = parse_list_argument_float(args['--beta'])
 use_additive_noise_when_forecasting = args['--use_noise']
 use_bias = args['--use_bias']
 use_b = args['--use_b']
+input_scaling = parse_list_argument_float(args['--input_scaling'])
 ensembles = int(args['--ensembles'])
 
 print(sparsity)
@@ -136,19 +139,17 @@ if not os.path.exists(output_path):
     print('made directory')
 
 #load in data
-q = np.load(input_path+'/q.npy')
-ke = np.load(input_path+'/KE.npy')
-time_vals = np.load(input_path+'/time_vals.npy')
+q = np.load(input_path+'/q5000_30000.npy')
+ke = np.load(input_path+'/KE5000_30000.npy')
+evap = np.load(input_path+'/evap5000_30000.npy')
+time_vals = np.load(input_path+'/total_time5000_30000.npy')
 print(len(q), len(ke), len(time_vals))
 
-# Reshape the arrays into column vectors
 ke_column = ke.reshape(len(ke), 1)
 q_column = q.reshape(len(q), 1)
+evap_column = evap.reshape(len(evap), 1)
 
-#ke_column = np.sqrt(ke_column)
-
-# Concatenate the column vectors horizontally
-data = np.hstack((ke_column, q_column))
+data = np.hstack((ke_column, q_column, evap_column))
 
 # Print the shape of the combined array
 print(data.shape)
@@ -170,6 +171,7 @@ param_grid = dict(n_reservoir=n_reservoir,
                   random_state=[42],
                   use_bias=[use_bias],
                   use_b=[use_b],
+                  input_scaling=input_scaling,
                   beta=beta)
 
 print(param_grid)
@@ -263,6 +265,8 @@ def grid_search_SSV(forecaster, param_grid, data, time_vals, ensembles, n_predic
     test_data = data[trainlen+synclen:trainlen+synclen+predictionlen, :]
     sync_data = data[trainlen:trainlen+synclen]
     future_data = data[trainlen:trainlen+synclen+predictionlen, :]
+    variables = data.shape[-1]
+    print('number of var =', variables)
 
     # Get the parameter labels and values
     param_labels = list(param_grid.keys())
@@ -273,7 +277,7 @@ def grid_search_SSV(forecaster, param_grid, data, time_vals, ensembles, n_predic
 
     PH_params = np.zeros((num_combinations, ensembles))
     MSE_params = np.zeros((num_combinations, ensembles))
-    prediction_data = np.zeros((num_combinations, len(prediction_times), 2, ensembles))
+    prediction_data = np.zeros((num_combinations, len(prediction_times), variables, ensembles))
 
     counter = 0
     # Loop through all combinations
@@ -288,7 +292,8 @@ def grid_search_SSV(forecaster, param_grid, data, time_vals, ensembles, n_predic
 
         ensemble_all_vals_ke = np.zeros((len(prediction_times), ensembles))
         ensemble_all_vals_q = np.zeros((len(prediction_times), ensembles))
-        ensemble_all_vals = np.zeros((len(prediction_times), 2, ensembles))
+        ensemble_all_vals = np.zeros((len(prediction_times), variables, ensembles))
+        ensemble_all_vals_unscaled = np.zeros((len(prediction_times), variables, ensembles))
         MSE_ens = np.zeros((ensembles))
         PH_ens = np.zeros((ensembles))
 
@@ -298,6 +303,8 @@ def grid_search_SSV(forecaster, param_grid, data, time_vals, ensembles, n_predic
             modelsync._update(sync_data, UpdateModes = UpdateModes.synchronization)
             #predict
             future_predictionsync = modelsync.predict(predictionlen)
+            if i==0:
+                print(np.shape(future_predictionsync))
 
             #inverse scalar
             inverse_training_data = ss.inverse_transform(ts) 
@@ -306,14 +313,13 @@ def grid_search_SSV(forecaster, param_grid, data, time_vals, ensembles, n_predic
             inverse_future_data = ss.inverse_transform(future_data) #this include the sync data
 
             ### ensemble mean ###
-            ensemble_all_vals_ke[:,i] = future_predictionsync[:,0]
-            ensemble_all_vals_q[:,i] = future_predictionsync[:,1]
-            ensemble_all_vals[:, 0, i] = future_predictionsync[:,0]
-            ensemble_all_vals[:, 1, i] = future_predictionsync[:,1]
+            for v in range(variables):
+                ensemble_all_vals_unscaled[:, v, i] = future_predictionsync[:,v]
+                ensemble_all_vals[:, v, i] = inverse_prediction[:,v]
 
-            mse = MSE(ensemble_all_vals[:,:,i], test_data[:,:])
+            mse = MSE(ensemble_all_vals_unscaled[:,:,i], test_data[:,:])
             MSE_ens[i] = mse
-            ph = prediction_horizon(ensemble_all_vals[:,:,i], test_data[:,:], threshold = 1e-2)
+            ph = prediction_horizon(ensemble_all_vals_unscaled[:,:,i], test_data[:,:], threshold = 0.2)
             PH_ens[i] = ph
 
         MSE_params[counter,:] = MSE_ens
