@@ -154,44 +154,79 @@ def boxplot_2d(x,y, ax, whis=1.5, choose_color='black'):
         facecolors='none', edgecolors=choose_color,
     )
     
-def timeseries_plustraining(ke_prediction, q_prediction, test_data_ke, test_data_q, train_data_ke, train_data_q, train_times, prediction_times, ax=ax):
+def timeseries(prediction, test_data, prediction_times, variables, variable_names, ax=ax):
     '''
-    plots the training, prediction and truth timeseries for one single ensemble memeber
+    plots timeseries prediction for one single ensemble member
+    inputs:
+    prediction - prediction (array: (time, variables))
+    test_data - true data (array: (time, variables))
+    prediction_times - array of prediction times (array: (time))
+    variables - number of varaibles in data (integer)
+    variable names - array of the labels of the variables (array: (variable names))
+    ax - axis for figure of length variables
     '''
-    if ax.shape != (2,):
-        print('ax shape needs to be 2')
+    if ax.shape != (variables,):
+        print('ax shape needs to be shape', variables)
         return
-    ax[0].plot(train_times, train_data_ke, linewidth=2,
-                                color='tab:blue')
-    ax[1].plot(train_times, train_data_q, linewidth=2,
-                                color='tab:blue')
-    ax[0].fill_between(train_times, train_data_ke.min(), train_data_ke.max(), alpha=0.2, color='tab:blue', label='Training')
-    ax[1].fill_between(train_times, train_data_q.min(), train_data_q.max(), alpha=0.2, color='tab:blue', label='Training')
-    ax[0].plot(prediction_times, ke_prediction,
+    for v in range(variables):
+        ax[v].plot(prediction_times, prediction[:,v],
                                 linewidth=2,
                                 label='Prediction', color='orange')
-    ax[1].plot(prediction_times, q_prediction,
-                                linewidth=2,
-                                label='Prediction', color='orange')
-    ax[0].plot(prediction_times, test_data_ke, linewidth=2,
-                                label='True', color='tab:blue')    
-    ax[1].plot(prediction_times, test_data_q, linewidth=2,
-                                label='True', color='tab:blue')
-    plt.legend()
-    ax[0].set_ylabel('KE')
-    ax[1].set_ylabel('q')
-    ax[1].set_xlabel('time')
+        ax[v].plot(prediction_times, test_data[:,v], linewidth=2,
+                                label='True', color='tab:blue', linestyle='--')
+        ax[v].set_ylabel(variable_names[v])
+        ax[v].grid()
+    ax[variables-1].set_xlabel('time')
     print('added prediction')
-
-def phase_space_prediction(ke_prediction, q_prediction, test_data_ke, test_data_q, train_data_ke, train_data_q, train_times, prediction_times, ax=ax, fig=fig):
+    
+def timeseries_plustraining(prediction, test_data, train_data, train_times, prediction_times, variables, variable_names, ax=ax):
+    '''
+    plots timeseries prediction with training for one single ensemble member
+    inputs:
+    prediction - prediction (array: (time, variables))
+    test_data - true data (array: (time, variables))
+    train_data - data used for training (array: (train_times, variables))
+    train_times - array of times used for training (array: (train_times))
+    prediction_times - array of prediction times (array: (time))
+    variables - number of varaibles in data (integer)
+    variable names - array of the labels of the variables (array: (variable names))
+    ax - axis for figure of length variables
+    '''
+    if ax.shape != (variables,):
+        print('ax shape needs to be shape', variables)
+        return
+    for v in range(variables):
+        ax[v].plot(train_times, train_data[:,v], linewidth=2,
+                                    color='tab:blue')
+        ax[v].fill_between(train_times, train_data[:,v].min(), train_data[:,v].max(), alpha=0.2, color='tab:blue', label='Training')
+        ax[v].plot(prediction_times, prediction[:,v],
+                                linewidth=2,
+                                label='Prediction', color='orange')
+        ax[v].plot(prediction_times, test_data[:,v], linewidth=2,
+                                label='True', color='tab:blue', linestyle='--')
+        ax[v].set_ylabel(variable_names[v])
+        ax[v].grid()
+    ax[variables-1].set_xlabel('time')
+    print('added prediction')
+    
+def phase_space_prediction(prediction, test_data, prediction_times, variables, variable_names, ax=ax, fig=fig):
     '''
     plots the phase space prediction for prediction and true for one single ensemble member
+    inputs:
+    prediction - prediction (array: (time, variables))
+    test_data - true data (array: (time, variables))
+    prediction_times - array of prediction times (array: (time))
+    variables - number of varaibles in data (integer)
+    variable names - array of the labels of the variables (array: (variable names))
+    ax - axis for figure of length variables
     '''
+    if ax is None:
+        fig, ax = plt.subplots(1, figsize=(8, 6), tight_layout=True)
     plt.grid()
-    s_pred = ax.scatter(q_prediction, ke_prediction, 
+    s_pred = ax.scatter(prediction[:,1], prediction[:,0],
                             cmap='viridis', marker='x',
                             c=prediction_times, vmin=prediction_times[0], vmax=prediction_times[-1], label='Prediction')
-    s_true = ax.scatter(test_data_q, test_data_ke,
+    s_true = ax.scatter(test_data[:,1], test_data[:,0],
                             cmap='viridis', marker='.', c=prediction_times,
                             vmin=prediction_times[0], vmax=prediction_times[-1], label='True')
     ax.set_xlabel('q')
@@ -201,100 +236,115 @@ def phase_space_prediction(ke_prediction, q_prediction, test_data_ke, test_data_
     cbar_true = fig.colorbar(s_true, ax=ax, label='time')
     plt.legend()
 
-def ensemble_timeseries_plustraining(ensemble_all_vals_ke, ensemble_all_vals_q, test_data_ke, test_data_q, train_data_ke, train_data_q, train_times, prediction_times, ax=ax):
-    if ax.shape != (2,):
-        print('ax shape needs to be 2')
-        return
-    median_ke = np.median(ensemble_all_vals_ke, axis=1)
-    median_q = np.median(ensemble_all_vals_q, axis=1)
-    lower_bound_ke = np.percentile(ensemble_all_vals_ke, 10, axis=1)
-    upper_bound_ke = np.percentile(ensemble_all_vals_ke, 90, axis=1)
-    lower_bound_q = np.percentile(ensemble_all_vals_q, 10, axis=1)
-    upper_bound_q = np.percentile(ensemble_all_vals_q, 90, axis=1)
-    ax[0].plot(train_times, train_data_ke, linewidth=2,
-                                color='tab:blue')
-    ax[1].plot(train_times, train_data_q, linewidth=2,
-                                color='tab:blue')
-    ax[0].plot(prediction_times, median_ke,
-                                linewidth=2,
-                                label='Median Prediction', color='orange')
-    ax[0].fill_between(prediction_times, lower_bound_ke, upper_bound_ke, color='orange', alpha=0.3, label='80% Confidence Interval')
+def ensemble_timeseries_plustraining_mean(ensemble_all_vals, test_data, train_data, train_times, prediction_times, variables, variable_names, ax=ax):
+    '''
+    plots timeseries prediction with training for ensemble
+    inputs:
+    ensemble_all_vals - prediction for all ensembles (array: (time, variables, ensembles))
+    test_data - true data (array: (time, variables))
+    train_data - data used for training (array: (train_times, variables))
+    train_times - array of times used for training (array: (train_times))
+    prediction_times - array of prediction times (array: (time))
+    variables - number of varaibles in data (integer)
+    variable names - array of the labels of the variables (array: (variable names))
+    ax - axis for figure of length variables
+    '''
+    #means
+    means = np.zeros((len(prediction_times), variables))
+    lower_bounds = np.zeros((len(prediction_times),variables))
+    upper_bounds =  np.zeros((len(prediction_times),variables))
+    for v in range(variables):
+        means[:,v] = np.mean(ensemble_all_vals[:,v,:], axis=1)
+        lower_bounds[:,v] = np.percentile(ensemble_all_vals[:,v,:], 5, axis=1)
+        upper_bounds[:,v] = np.percentile(ensemble_all_vals[:,v,:], 95, axis=1)
+        ax[v].plot(train_times, train_data[:,v], linewidth=2,
+                                    color='tab:blue')
+        ax[v].plot(prediction_times, means[:,v],
+                                    linewidth=2,
+                                    label='Mean Prediction', color='orange')
+        ax[v].fill_between(prediction_times, lower_bounds[:,v], upper_bounds[:,v], color='orange', alpha=0.3, label='90% Confidence Interval')
 
-    ax[1].plot(prediction_times, median_q,
-                                linewidth=2,
-                                label='Median Prediction', color='orange')
-    ax[1].fill_between(prediction_times, lower_bound_q, upper_bound_q, color='orange', alpha=0.3, label='80% Confidence Interval')
-    ax[0].plot(prediction_times, test_data_ke, linewidth=2,
-                                label='True', color='tab:blue')
-    ax[1].plot(prediction_times, test_data_q, linewidth=2,
-                                label='True', color='tab:blue')
-    plt.legend()
-    ax[0].set_ylabel('KE')
-    ax[1].set_ylabel('q')
-    ax[1].set_xlabel('time')
-    ax[0].set_xlim(10000, prediction_times[-1])
-    ax[1].set_xlim(10000, prediction_times[-1])
-    ax[0].grid()
-    ax[1].grid()
+        ax[v].plot(prediction_times, test_data[:,v], linewidth=2,
+                                    label='True', color='tab:blue', linestyle ='--')
+        ax[v].set_ylabel(varaible_names[v])
+        ax[v].grid()
+        #ax[v].set_xlim(prediction_times[0]-100, prediction_times[-1])
+    ax[variables-1].set_xlabel('time')
     print('added prediction')
 
-def ensemble_timeseries(ensemble_all_vals_ke, ensemble_all_vals_q, test_data_ke, test_data_q, prediction_times, ax=ax):
+
+def ensemble_timeseries(ensemble_all_vals, test_data, prediction_times, variables, variable_names, ax=ax):
     '''
-    plots the median prediction and 80% confidence interval
+    plots timeseries prediction for ensemble
+    inputs:
+    ensemble_all_vals - prediction for all ensembles (array: (time, variables, ensembles))
+    test_data - true data (array: (time, variables))
+    prediction_times - array of prediction times (array: (time))
+    variables - number of varaibles in data (integer)
+    variable names - array of the labels of the variables (array: (variable names))
+    ax - axis for figure of length variables
     '''
     if ax.shape != (2,):
         print('ax shape needs to be 2')
         return
-    median_ke = np.median(ensemble_all_vals_ke, axis=1) 
-    median_q = np.median(ensemble_all_vals_q, axis=1) 
-    lower_bound_ke = np.percentile(ensemble_all_vals_ke, 10, axis=1)
-    upper_bound_ke = np.percentile(ensemble_all_vals_ke, 90, axis=1)
-    lower_bound_q = np.percentile(ensemble_all_vals_q, 10, axis=1)
-    upper_bound_q = np.percentile(ensemble_all_vals_q, 90, axis=1)
-    
-    ax[0].plot(prediction_times, median_ke,
-                                linewidth=2,
-                                label='Median Prediction', color='green')
-    ax[0].fill_between(prediction_times, lower_bound_ke, upper_bound_ke, color='green', alpha=0.3, label='80% Confidence Interval')
-
-    ax[1].plot(prediction_times, median_q,
-                                linewidth=2,
-                                label='Median Prediction')
-    ax[1].fill_between(prediction_times, lower_bound_q, upper_bound_q, color='green', alpha=0.3, label='80% Confidence Interval')
-    plt.legend()
+    means = np.zeros((len(prediction_times), variables))
+    lower_bounds = np.zeros((len(prediction_times),variables))
+    upper_bounds =  np.zeros((len(prediction_times),variables))
+    for v in range(variables):
+        means[:,v] = np.mean(ensemble_all_vals[:,v,:], axis=1)
+        lower_bounds[:,v] = np.percentile(ensemble_all_vals[:,v,:], 5, axis=1)
+        upper_bounds[:,v] = np.percentile(ensemble_all_vals[:,v,:], 95, axis=1)
+        ax[v].plot(prediction_times, means[:,v],
+                                    linewidth=2,
+                                    label='Mean Prediction', color='orange')
+        ax[v].plot(prediction_times, test_data[:,v], linewidth=2,
+                                    label='True', color='tab:blue')
+        ax[v].fill_between(prediction_times, lower_bounds[:,v], upper_bounds[:,v], color='orange', alpha=0.3, label='90% Confidence Interval')
+        ax[v].set_ylabel(variable_names[v])
+        ax[v].grid()
+        ax[v].set_xlim(prediction_times[0]-100, prediction_times[-1])
+    ax[variables-1].set_xlabel('time')
     print('added prediction')
 
-def meteogram(ensemble_all_vals_ke, ensemble_all_vals_q, test_data_ke, test_data_q, prediction_times, forecast_interval=75, ax=ax):
+def meteogram(ensemble_all_vals, test_data, prediction_times, variables, variable_names, ax=ax, forecast_interval=200):
+    '''
+    plots metogram at forecast intervals
+    inputs:
+    ensemble_all_vals - prediction for all ensembles (array: (time, variables, ensembles))
+    test_data - true data (array: (time, variables))
+    prediction_times - array of prediction times (array: (time))
+    variables - number of varaibles in data (integer)
+    variable names - array of the labels of the variables (array: (variable names))
+    ax - axis for figure of length variables
+    forecast interval - length of time between forecasts 
+    '''
     if ax.shape != (2,):
         print('ax shape needs to be 2')
         return
-    ensembles = ensemble_all_vals_ke.shape[-1]
-    no_of_forecasts = int(len(prediction_times)/forecast_interval) + 1
-    q_forecast = np.zeros((no_of_forecasts, ensembles))
-    ke_forecast = np.zeros((no_of_forecasts, ensembles))
+    ensembles = ensemble_all_vals.shape[-1]
+    no_of_forecasts = int(len(prediction_times)/forecast_interval)
+    forecast = np.zeros((no_of_forecasts, variables, ensembles))
     forecast_times = np.zeros((no_of_forecasts))
     print(no_of_forecasts)
 
     forecast_time = 0
-    ensembles = len(ensemble_all_vals_ke[0,:])
+    ensembles = len(ensemble_all_vals[0,0,:])
     for t in range(len(prediction_times)):
       if t % forecast_interval == 0:
-        q_forecast[forecast_time, :] = ensemble_all_vals_q[t,:]
-        ke_forecast[forecast_time, :] = ensemble_all_vals_ke[t,:]
+        for v in range(variables):
+            forecast[forecast_time, v, :] = ensemble_all_vals[t, v, :]
         forecast_times[forecast_time] = int(prediction_times[t])
         forecast_time += 1
 
-    ax[0].boxplot(ke_forecast.T, positions=forecast_times, labels=forecast_times, widths=10)
-    ax[1].boxplot(q_forecast.T, positions=forecast_times, labels=forecast_times, widths=10)
-    ax[0].plot(prediction_times, test_data_ke)
-    ax[1].plot(prediction_times, test_data_q)
-    ax[0].set_ylabel('KE')
-    ax[1].set_ylabel('q')
-    ax[1].set_xlabel('time')
-    ax[0].set_xlim(forecast_times[0]-10, forecast_times[-1]+10)
-    ax[1].set_xlim(forecast_times[0]-10, forecast_times[-1]+10)
-    ax[0].grid()
-    ax[1].grid()
+    print(forecast_times)
+    for v in range(variables):
+        ax[v].boxplot(forecast[:,v,:].T, positions=forecast_times, labels=forecast_times, widths=20, showmeans=True)
+        ax[v].plot(prediction_times, test_data[:,v])
+        ax[v].set_xlim(forecast_times[0]-10, forecast_times[-1]+10)
+        ax[v].grid()
+        name = variable_names[v]
+        ax[v].set_ylabel(name)
+    ax[-1].set_xlabel('time')
 
 def pdfs(ensemble_all_vals_ke, ensemble_all_vals_q, test_data_ke, test_data_q, prediction_times, ax=ax):
     flatten_ensembles_ke = ensemble_all_vals_ke.flatten()
@@ -335,41 +385,158 @@ def phase_diagram_boxplot(ensemble_all_vals_ke, ensemble_all_vals_q, test_data_k
     ax.set_ylim(0, 3e-4)
     ax.set_ylabel('KE')
     ax.set_xlabel('q')
+    
+#%% PEAKS 
 
-def true_next_peak(test_data_ke, test_data_q, prediction_times):
+def true_next_peak_multiple(test_data, prediction_times):
+    '''
+    finds peaks in true data
+    inputs:
+    test_data - true data (array: (time, variables))
+    prediction_times - array of prediction times (array: (time))
+    outputs:
+    num_true_peaks - number of peaks in the prediction time (integer)
+    true_next_peak_time - array of the times of the next true peaks (array)
+    true_next_peak_value - array of the values of the amplitude of the next true peaks (array)
+    '''
     # set thresholds
     threshold = 0.00005
-    distance = 10
-    prominence = 0.000025
+    distance = 2 # 10 for same IC
+    prominence = 0.000025 #0.000025
 
-    peaks_true, _ = find_peaks(test_data_ke, height=threshold, distance=distance, prominence = prominence)
+    peaks_true, _ = find_peaks(test_data[:,0], height=threshold, distance=distance, prominence = prominence)
     num_true_peaks = len(peaks_true)
-    print(prediction_times[peaks_true])
-    true_next_peak_time = prediction_times[peaks_true[0]] #records time of next peak
-    true_next_peak_value = test_data_ke[peaks_true[0]]
-    print(num_true_peaks, true_next_peak_time, true_next_peak_value)
+    #print(prediction_times[peaks_true])
+    true_next_peak_time = prediction_times[peaks_true] #records time of next peak
+    true_next_peak_value = test_data[peaks_true,0]
+    #print(num_true_peaks, true_next_peak_time, true_next_peak_value)
 
     return num_true_peaks, true_next_peak_time, true_next_peak_value
-    
-def pred_next_peak(pred_ke, pred_q, prediction_times):
+
+def pred_next_peak(pred, prediction_times):
+    '''
+    finds the next peak ONLY in predicted data
+    inputs:
+    pred - predicted data (array: (time, variables))
+    prediction_times - array of prediction times (array: (time))
+    outputs:
+    num_pred_peaks - number of peaks in the prediction time (integer)
+    pred_next_peak_time - time of the next pred peak (float)
+    pred_next_peak_value - value of the amplitude of the next predicted peak (float)
+    '''
     # set thresholds
     threshold = 0.00005
-    distance = 10
-    prominence = 0.000025
+    distance = 2 # 10 for same IC
+    prominence = 0.000025 #0.000025
 
-    peaks_pred, _ = find_peaks(pred_ke, height=threshold, distance=distance, prominence = prominence)
+    peaks_pred, _ = find_peaks(pred[:,0], height=threshold, distance=distance, prominence = prominence)
     num_pred_peaks = len(peaks_pred)
     if num_pred_peaks > 0:
         pred_next_peak_time = prediction_times[peaks_pred[0]]
-        pred_next_peak_value = pred_ke[peaks_pred[0]]
+        pred_next_peak_value = pred[peaks_pred[0],0]
     else:
         #print('no peaks recorded')
         pred_next_peak_time = np.inf #no peak so set the next peak super far in advance so its not recorded
-        pred_next_peak_value = np.NaN
+        pred_next_peak_value = 0
 
     return num_pred_peaks, pred_next_peak_time, pred_next_peak_value
+    
+def pred_next_peak_ensemble(ensemble_predictions, prediction_times):
+    '''
+    finds the next peak ONLY in predicted data ensemble
+    inputs:
+    ensemble_predictions - predicted data (array: (time, variables, ensembles))
+    prediction_times - array of prediction times (array: (time))
+    outputs:
+    num_predicted_peaks - number of peaks in the prediction time for each ensemble member (list)
+    pred_next_peak_time_all_members - time of the next pred peak for each ensemble member (list)
+    pred_next_peak_value_all_members - value of the amplitude of the next predicted peak for each ensemble member (list)
+    '''
+    # set thresholds
+    threshold = 0.00005
+    distance = 2 # 10 for same IC
+    prominence = 0.000025 #0.000025
 
-def peaks_plot(test_data_ke, test_data_q, prediction_times, ax=ax):
-    tp = true_next_peak(test_data_ke, test_data_q, prediction_times)
+    pred_next_peak_time_all_members = []
+    pred_next_peak_value_all_members = []
+    num_predicted_peaks = []
+
+    ensembles = np.shape(ensemble_predictions)[-1]
+    for r in range(ensembles):
+        pp = pred_next_peak(ensemble_predictions[:,:,r], prediction_times)
+        num_predicted_peaks.append(pp[0])
+        pred_next_peak_time_all_members.append(pp[1])
+        pred_next_peak_value_all_members.append(pp[2])
+
+    return num_predicted_peaks, pred_next_peak_time_all_members, pred_next_peak_value_all_members
+    
+def fraction_of_peaks_within_t(true_next_peak_time, pred_next_peak_time_all_members, time_error=50):
+    '''
+    fraction of peaks in the ensemble that predict a peak within error of true peak (float, <= 1)
+    inputs:
+    true_next_peak_time - tru time of the next peak (float)
+    pred_next_peak_time_all_member - predicted time of next peak in each ensemble member (array: (ensembles))
+    '''
+    counter = 0
+    for value in pred_next_peak_time_all_members:
+        #print(value)
+        if abs(value - true_next_peak_time) <= time_error:
+            counter += 1
+    return counter/len(pred_next_peak_time_all_members)    
+    
+def peak_amplitude_error(true_next_peak_value, pred_next_peak_value_all_members):
+    '''
+    retuns the avg amplitude and a RMSE
+    inputs:
+    true_next_peak_time - tru time of the next peak (float)
+    pred_next_peak_time_all_member - predicted time of next peak in each ensemble member (array: (ensembles))
+    '''
+    true_peak_values_array = np.ones((ensembles))*true_next_peak_value
+    RMSE = np.sqrt(np.mean((pred_next_peak_value_all_members-true_next_peak_value)**2))
+    avg_amplitude = np.mean(pred_next_peak_value_all_members)
+    return avg_amplitude, RMSE
+
+def peak_analysis(ensemble_predictions, test_data, prediction_times, time_error=50, inspect_plots=True):
+    '''
+    analysis on the peaks in the ensemble
+    inputs:
+    ensemble_predictions - predicted data (array: (time, variables, ensembles))
+    test_data - true data (array: (time, variables))
+    prediction_times - array of prediction times (array: (time))
+    time_error - number of time steps for the peak to be within (integer)
+    inspect_plots - shows plots (true/false)
+    outputs:
+    frac - fraction of peaks in the ensemble that predict a peak within error of true peak (float, <= 1)
+    avg_amplitude - avg amplitude of the peak found in the predictions (float)
+    RMSE - root mean square error between predicted peak and true peak across ensemble (float)
+    peaks - ((number of esnemble memebrs with correct number of peaks, number missing one peak), mean number of peaks in ensemble, min number of peaks in ensemble, max number of peaks in ensemble)
+    '''
+    num_predicted_peaks, pred_next_peak_time, pred_next_peak_value = pred_next_peak_ensemble(ensemble_predictions, prediction_times)
+    num_true_peaks, true_next_peak_time, true_next_peak_value = true_next_peak_multiple(test_data, prediction_times)
+
+    frac = fraction_of_peaks_within_t(true_next_peak_time[0], pred_next_peak_time, time_error=time_error)
+    avg_amplitude, RMSE = peak_amplitude_error(true_next_peak_value[0], pred_next_peak_value)
+
+    number_peaks = number_of_peaks_captured(num_true_peaks, num_predicted_peaks)
+
+    if inspect_plots == True:
+        fig,ax = plt.subplots(1, figsize=(4,6))
+        ax.boxplot(pred_next_peak_value[:], meanline=True, showmeans=True)
+        ax.scatter(1, true_next_peak_value[0])
+        ax.set_ylabel('KE peak value')
+        ax.grid()
+        print(np.mean(pred_next_peak_value[:]))
+        print(np.abs(np.mean(pred_next_peak_value[:]) - true_next_peak_value[0])/((np.mean(pred_next_peak_value[:]) + true_next_peak_value[0])/2) * 100)
+
+    return frac, avg_amplitude, RMSE, (number_peaks, np.mean(num_predicted_peaks), np.min(num_predicted_peaks), np.max(num_predicted_peaks))
+
+def peaks_plot(test_data, prediction_times, ax=ax):
+    '''
+    plots the true peaks across a prediction interval
+    test_data - true data (array: (time, variables))
+    prediction_times - array of prediction times (array: (time))
+    '''
+    tp = true_next_peak_multiple(test_data, prediction_times)
     #print(tp[1], tp[2])
-    ax[0].scatter(tp[1], tp[2])
+    ax.scatter(tp[1], tp[2], marker='x', color='red')
+
