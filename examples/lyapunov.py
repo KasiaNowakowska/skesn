@@ -224,7 +224,7 @@ for xi in range(len(x_positions)):
     counter += 1
 
   np.save(output_path+'/mean_log_distances.npy', dist)
-'''
+
 ##### CP4 Data ######
 
 # functions
@@ -341,7 +341,7 @@ for m0 in range(len(m_0)):
   dist[m0,:] = mean_log_distance
 
   np.save(output_path+'/mean_log_distances.npy', dist)
-
+'''
 
 '''
 ###### OLDER STUFF ####

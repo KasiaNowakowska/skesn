@@ -1,7 +1,7 @@
 """
 python script for ESN grid search.
 
-Usage: ESN.py [--input_path=<input_path> --output_path=<output_path> --n_train=<n_train> --n_sync=<n_sync> --n_prediction=<n_prediction> --synchronisation=<synchronisation> --n_reservoir=<n_reservoir> --spectral_radius=<spectral_radius> --sparsity=<sparsity> --lambda_r=<lambda_r> --beta=<beta> --use_noise=<use_noise> --use_bias=<use_bias> --use_b=<use_b> --input_scaling=<input_scaling> --ensembles=<ensembles>]
+Usage: ESN.py [--input_path=<input_path> --output_path=<output_path> --n_train=<n_train> --n_sync=<n_sync> --n_prediction=<n_prediction> --synchronisation=<synchronisation> --n_reservoir=<n_reservoir> --spectral_radius=<spectral_radius> --sparsity=<sparsity> --lambda_r=<lambda_r> --use_noise=<use_noise> --use_bias=<use_bias> --use_b=<use_b> --input_scaling=<input_scaling> --ensembles=<ensembles>]
 
 Options:
     --input_path=<input_path>          file path to use for data
@@ -14,7 +14,6 @@ Options:
     --spectral_radius=<spectral radius> spectral radius of reservoir [default: 0.80]
     --sparsity=<sparsity>              sparsity of reservoir [default: 0.80]
     --lambda_r=<lambda_r>              noise added to update equation, only when use_noise is on [default: 1e-2]
-    --beta=<beta>                      tikhonov regularisation parameter [default: 1e-3]
     --use_noise=<use_noise>            turn noise on in update equation [default: True]
     --use_bias=<use_bias>              turn bias term on in u adds nother dimension to input [default: True]
     --use_b=<use_b>                    turn on extra bias term in actoiivation function [default: True] 
@@ -121,7 +120,6 @@ n_reservoir = parse_list_argument_int(args['--n_reservoir'])
 spectral_radius = parse_list_argument_float(args['--spectral_radius'])
 sparsity = parse_list_argument_float(args['--sparsity'])
 lambda_r = parse_list_argument_float(args['--lambda_r'])
-beta = parse_list_argument_float(args['--beta'])
 use_additive_noise_when_forecasting = args['--use_noise']
 use_bias = args['--use_bias']
 use_b = args['--use_b']
@@ -130,7 +128,7 @@ ensembles = int(args['--ensembles'])
 
 print(sparsity)
 
-data_dir = '/validation_n_reservoir{0:}_spectral_radius{1:}_sparsity{2:}_lambda_r{3:}_beta{4:}_noise{5:}_bias{6:}_b{7:}'.format(args['--n_reservoir'], args['--spectral_radius'], args['--sparsity'], args['--lambda_r'], args['--beta'], args['--use_noise'], args['--use_bias'], args['--use_b'])
+data_dir = '/validation_n_reservoir{0:}_spectral_radius{1:}_sparsity{2:}_lambda_r{3:}_noise{4:}_bias{5:}_b{6:}_input_scaling{7:}'.format(args['--n_reservoir'], args['--spectral_radius'], args['--sparsity'], args['--lambda_r'], args['--use_noise'], args['--use_bias'], args['--use_b'], args['--input_scaling'])
 
 output_path = output_path1+data_dir
 print(output_path)
@@ -171,15 +169,14 @@ param_grid = dict(n_reservoir=n_reservoir,
                   random_state=[42],
                   use_bias=[use_bias],
                   use_b=[use_b],
-                  input_scaling=input_scaling,
-                  beta=beta)
+                  input_scaling=input_scaling)
 
 print(param_grid)
 trainlen = n_train
 synclen = n_sync
 predictionlen = n_prediction
 
-def grid_search_SSV_retrained(forecaster, param_grid, data, time_vals, ensembles, n_prediction, n_train, n_sync):
+def grid_search_SSV_retrained(forecaster, param_grid, data, time_vals, ensembles_retrain, n_prediction, n_train, n_sync):
     print(param_grid)
 
     synclen = n_sync
@@ -194,6 +191,7 @@ def grid_search_SSV_retrained(forecaster, param_grid, data, time_vals, ensembles
     test_data = data[trainlen+synclen:trainlen+synclen+predictionlen, :]
     sync_data = data[trainlen:trainlen+synclen]
     future_data = data[trainlen:trainlen+synclen+predictionlen, :]
+    variables = data.shape[-1]
 
     # Get the parameter labels and values
     param_labels = list(param_grid.keys())
@@ -202,8 +200,8 @@ def grid_search_SSV_retrained(forecaster, param_grid, data, time_vals, ensembles
     # Calculate the number of combinations
     num_combinations = prod(len(values) for values in param_grid.values())
 
-    PH_params = np.zeros((num_combinations, ensembles))
-    MSE_params = np.zeros((num_combinations, ensembles))
+    PH_params = np.zeros((num_combinations, ensembles_retrain))
+    MSE_params = np.zeros((num_combinations, ensembles_retrain))
 
     counter = 0
     # Loop through all combinations
@@ -214,13 +212,12 @@ def grid_search_SSV_retrained(forecaster, param_grid, data, time_vals, ensembles
         print(modelsync)
         # Now you can use `modelsync` with the current combination of parameters
 
-        ensemble_all_vals_ke = np.zeros((len(prediction_times), ensembles))
-        ensemble_all_vals_q = np.zeros((len(prediction_times), ensembles))
-        ensemble_all_vals = np.zeros((len(prediction_times), 2, ensembles))
-        MSE_ens = np.zeros((ensembles))
-        PH_ens = np.zeros((ensembles))
+        ensemble_all_vals = np.zeros((len(prediction_times), variables, ensembles))
+        ensemble_all_vals_unscaled = np.zeros((len(prediction_times), variables, ensembles))
+        MSE_ens = np.zeros((ensembles_retrain))
+        PH_ens = np.zeros((ensembles_retrain))
 
-        for i in range(ensembles):
+        for i in range(ensembles_retrain):
             print('ensemble member =', i)
             modelsync.fit(ts)
             #synchronise data
@@ -235,14 +232,13 @@ def grid_search_SSV_retrained(forecaster, param_grid, data, time_vals, ensembles
             inverse_future_data = ss.inverse_transform(future_data) #this include the sync data
 
             ### ensemble mean ###
-            ensemble_all_vals_ke[:,i] = future_predictionsync[:,0]
-            ensemble_all_vals_q[:,i] = future_predictionsync[:,1]
-            ensemble_all_vals[:, 0, i] = future_predictionsync[:,0]
-            ensemble_all_vals[:, 1, i] = future_predictionsync[:,1]
+            for v in range(variables):
+                ensemble_all_vals_unscaled[:, v, i] = future_predictionsync[:,v]
+                ensemble_all_vals[:, v, i] = inverse_prediction[:,v]
 
-            mse = MSE(ensemble_all_vals[:,:,i], test_data[:,:])
+            mse = MSE(ensemble_all_vals_uncaled[:,:,i], test_data[:,:])
             MSE_ens[i] = mse
-            ph = prediction_horizon(ensemble_all_vals[:,:,i], test_data[:,:], threshold = 0.1)
+            ph = prediction_horizon(ensemble_all_vals_unscaled[:,:,i], test_data[:,:], threshold = 0.1)
             PH_ens[i] = ph
 
         MSE_params[counter,:] = MSE_ens
@@ -250,7 +246,7 @@ def grid_search_SSV_retrained(forecaster, param_grid, data, time_vals, ensembles
         counter += 1
     return MSE_params, PH_params
 
-def grid_search_SSV(forecaster, param_grid, data, time_vals, ensembles, n_prediction, trainlen, synclen):
+def grid_search_SSV(forecaster, param_grid, data, time_vals, ensembles, n_prediction, n_train, n_sync):
     print(param_grid)
 
     synclen = n_sync
@@ -277,7 +273,7 @@ def grid_search_SSV(forecaster, param_grid, data, time_vals, ensembles, n_predic
 
     PH_params = np.zeros((num_combinations, ensembles))
     MSE_params = np.zeros((num_combinations, ensembles))
-    prediction_data = np.zeros((num_combinations, len(prediction_times), variables, ensembles))
+    #prediction_data = np.zeros((num_combinations, len(prediction_times), variables, ensembles))
 
     counter = 0
     # Loop through all combinations
@@ -324,9 +320,9 @@ def grid_search_SSV(forecaster, param_grid, data, time_vals, ensembles, n_predic
 
         MSE_params[counter,:] = MSE_ens
         PH_params[counter,:] = PH_ens
-        prediction_data[counter, :, :, :] = ensemble_all_vals[:, :, :]
+        #prediction_data[counter, :, :, :] = ensemble_all_vals[:, :, :]
         counter += 1
-    return MSE_params, PH_params, prediction_data
+    return MSE_params, PH_params
 
 # Generate all combinations of parameters
 # Get the parameter labels and values
@@ -340,9 +336,9 @@ df = pd.DataFrame(param_combinations, columns=param_labels)
 
 print(df)
 
-MSE_params, PH_params, prediction_data = grid_search_SSV(EsnForecaster, param_grid, data, time_vals, ensembles, n_prediction, trainlen, synclen)
+MSE_params, PH_params = grid_search_SSV(EsnForecaster, param_grid, data, time_vals, ensembles, n_prediction, trainlen, synclen)
 
-np.save(output_path+'/prediction_data.npy', prediction_data)
+#np.save(output_path+'/prediction_data.npy', prediction_data)
 
 MSE_mean = np.zeros((MSE_params.shape[0]))
 for i in range(MSE_params.shape[0]):
@@ -376,3 +372,11 @@ fig2.savefig(output_path+'/boxplotsPH.png')
 
 np.save(output_path+'/MSE_means.npy', MSE_mean)
 np.save(output_path+'/PH_means.npy', PH_mean)
+
+df_copy = df.copy(deep=True)
+df_copy['mean_MSE'] = MSE_mean
+df_copy['mean_PH'] = PH_mean
+
+# Save df_copy as CSV
+df_copy.to_csv(output_path+'/gridsearch_dataframe.csv', index=False)
+print('data frame saved')
