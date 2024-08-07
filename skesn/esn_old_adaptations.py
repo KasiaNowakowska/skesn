@@ -92,7 +92,8 @@ class EsnForecaster(BaseForecaster):
                  use_b=False,
                  use_bias=True,
                  use_r_bias=False,
-                 input_scaling=1.00):
+                 input_scaling=1.00,
+                 n_washout=0):
         self.n_reservoir = n_reservoir
         self.spectral_radius = spectral_radius
         self.sparsity = sparsity
@@ -109,6 +110,7 @@ class EsnForecaster(BaseForecaster):
         self.use_b = use_b
         self.use_r_bias = use_r_bias
         self.input_scaling = input_scaling
+        self.n_washout = n_washout
         
         # the given random_state might be either an actual RandomState object,
         # a seed or None (in which case we use numpy's builtin RandomState)
@@ -347,6 +349,7 @@ class EsnForecaster(BaseForecaster):
         """
         n_batches = endo_states.shape[0]
         n_timesteps = endo_states.shape[1]
+        n_washout = self.n_washout
         reservoir_states = np.random.rand(n_batches, n_timesteps, self.n_reservoir) * 2 -1 ###changed from 0
         means_train = np.zeros((n_batches*n_timesteps))
         std_devs_train = np.zeros((n_batches*n_timesteps))
@@ -396,8 +399,8 @@ class EsnForecaster(BaseForecaster):
                 idenmat = self.lambda_r * np.identity(self.n_reservoir)
             print('shape identity matrix', np.shape(idenmat))
             print('shape res', np.shape(reservoir_states))
-            U = np.dot(reservoir_states.T, reservoir_states) + idenmat
-            self.W_out_ = np.linalg.solve(U, reservoir_states.T @ endo_states).T
+            U = np.dot(reservoir_states[n_washout:, :].T, reservoir_states[n_washout:, :]) + idenmat
+            self.W_out_ = np.linalg.solve(U, reservoir_states[n_washout:, :].T @ endo_states[n_washout:, :]).T
         elif self.regularization == 'noise' or self.regularization is None:
             # same formulas as above but with lambda = 0
             U = np.dot(reservoir_states.T, reservoir_states)
@@ -409,8 +412,8 @@ class EsnForecaster(BaseForecaster):
         self.last_endo_state_ = endo_states[-1, :]
         if inspect:
             fig1, ax1 = plt.subplots(1,2, figsize=(10,10))
-            ax1[0].plot(np.arange(0, n_timesteps), means_train)
-            ax1[1].plot(np.arange(0, n_timesteps), std_devs_train)
+            ax1[0].plot(np.arange(n_washout, n_timesteps), means_train[n_washout:])
+            ax1[1].plot(np.arange(n_washout, n_timesteps), std_devs_train[n_washout:])
             plt.show()
         if exo_states is None:
             self.last_exo_state_ = 0
