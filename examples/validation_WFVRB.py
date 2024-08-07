@@ -164,17 +164,18 @@ MSE_mean = np.zeros((MSE_params.shape[0])) #number of combinations
 for i in range(MSE_params.shape[0]):
     MSE_mean[i] = np.mean(MSE_params[i,:])
     
-PH_mean = np.zeros((PH_params.shape[0]))
+PH_mean_02 = np.zeros((PH_params.shape[0]))
+PH_mean_05 = np.zeros((PH_params.shape[0]))
+PH_mean_10 = np.zeros((PH_params.shape[0]))
 for i in range(PH_params.shape[0]):
-    PH_mean[i] = np.mean(PH_params[i,:])
+    PH_mean_02[i] = np.mean(PH_params[i,:,0])
+    PH_mean_05[i] = np.mean(PH_params[i,:,1])
+    PH_mean_10[i] = np.mean(PH_params[i,:,2])
     
 MSE_mean_geom = np.zeros((MSE_params.shape[0]))
 for i in range(MSE_params.shape[0]):
-    MSE_mean_geom[i] = np.exp(np.mean(np.log(MSE_params[i,:])))
+    MSE_mean_geom[i] = np.exp(np.mean(np.log(MSE_params), axis=1))
     
-PH_mean_geom = np.zeros((PH_params.shape[0]))
-for i in range(PH_params.shape[0]):
-    PH_mean_geom[i] = np.exp(np.mean(np.log(PH_params[i,:])))
 
 '''
 fig, ax =plt.subplots(1, figsize=(12,10), tight_layout=True)
@@ -201,15 +202,17 @@ fig2.savefig(output_path+'/boxplotsPH.png')
 ''' 
 
 np.save(output_path+'/MSE_means.npy', MSE_mean)
-np.save(output_path+'/PH_means.npy', PH_mean)
+np.save(output_path+'/PH_means_02.npy', PH_mean_02)
+np.save(output_path+'/PH_means_02.npy', PH_mean_05)
+np.save(output_path+'/PH_means_02.npy', PH_mean_10)
 np.save(output_path+'/MSE_means_geom.npy', MSE_mean_geom)
-np.save(output_path+'/PH_means_geom.npy', PH_mean_geom)
 
 df_copy = df.copy(deep=True)
 df_copy['mean_MSE'] = MSE_mean
-df_copy['mean_PH'] = PH_mean
+df_copy['mean_PH_02'] = PH_mean_02
+df_copy['mean_PH_05'] = PH_mean_05
+df_copy['mean_PH_10'] = PH_mean_10
 df_copy['mean_MSE_geom'] = MSE_mean_geom
-df_copy['mean_PH_geom'] = PH_mean_geom
 
 # Save df_copy as CSV
 df_copy.to_csv(output_path+'/gridsearch_dataframe.csv', index=False)
