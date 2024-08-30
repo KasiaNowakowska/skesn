@@ -58,16 +58,16 @@ def _lorenz(x_0, dt, t_final):
             ts[saved_time_i, :] = cur_x
     return ts, times
 
+
 coord_names = [r'$X_t$', r'$Y_t$', r'$Z_t$']
 esn_dt = 0.01
-total_time=10
+total_time = 200
 all_data, times = _lorenz([1.0, 1.0, 1.0], dt=esn_dt, t_final=total_time) #[0.1, 0.2, 25.],
 print(np.shape(all_data))
-all_data = all_data[:, 0:3:2]
+all_data = all_data[:, :]
 ss = StandardScaler()
-all_data = ss.fit_transform(all_data)
-ts = all_data[:10000]
-train_times = times[:10000]
+data = ss.fit_transform(all_data)
+dt = esn_dt
 
 param_grid = dict(n_reservoir=[300],
                   spectral_radius=[0.20,0.30,0.40],
@@ -82,25 +82,19 @@ param_grid = dict(n_reservoir=[300],
                   use_b=[True],
                   input_scaling=[1.0])
 
-model = EsnForecaster(
-        n_reservoir=300,
-        spectral_radius=0.20,
-        sparsity=0.8,
-        regularization='l2',
-        lambda_r=0.0001,
-        in_activation='tanh',
-        out_activation='identity',
-        use_additive_noise_when_forecasting=True,
-        random_state=42,
-        use_bias=True,
-        use_b=True)
+ensembles = 10
+splits = 5
+LLE = 1.50
+LT = 1/LLE
+n_prediction_inLT = 10
+n_train_inLT = 20
+n_sync = 0
 
-n_prediction = 198
-trainlen = 528
-synclen = 5
-ensembles = 50
 
-MSE_params, PH_params = grid_search_SSV(EsnForecaster, param_grid, all_data, times, ensembles, n_prediction, trainlen, synclen)
+MSE_params, PH_params = grid_search_WFV(EsnForecaster, param_grid, data, times, ensembles, splits, LT, n_prediction_inLT, n_train_inLT, n_sync)
+
+np.save(output_path+'/MSE_params.npy', MSE_params)
+np.save(output_path+'/PH_params.npy', PH_params)
 
 # Generate all combinations of parameters
 # Get the parameter labels and values
@@ -114,43 +108,34 @@ df = pd.DataFrame(param_combinations, columns=param_labels)
 
 print(df)
 
-MSE_mean = np.zeros((MSE_params.shape[0]))
+MSE_mean = np.zeros((MSE_params.shape[0])) #number of combinations
 for i in range(MSE_params.shape[0]):
     MSE_mean[i] = np.mean(MSE_params[i,:])
     
-PH_mean = np.zeros((PH_params.shape[0]))
+PH_mean_02 = np.zeros((PH_params.shape[0]))
+PH_mean_05 = np.zeros((PH_params.shape[0]))
+PH_mean_10 = np.zeros((PH_params.shape[0]))
 for i in range(PH_params.shape[0]):
-    PH_mean[i] = np.mean(PH_params[i,:])
-
-fig, ax =plt.subplots(1, figsize=(12,10), tight_layout=True)
-ax.boxplot(MSE_params.T, meanline=True, showmeans=True)
-ax.set_ylabel('MSE')
-
-the_table = ax.table(cellText=df.values.T,
-                    rowLabels=df.columns,
-                    loc='bottom',
-                    bbox=[0, -0.75, 1, 0.65])
-
-fig.savefig(output_path+'/boxplots.png')
-
-fig2, ax2 = plt.subplots(1, figsize=(12,10), tight_layout=True)
-ax2.boxplot(PH_params.T, meanline=True, showmeans=True)
-ax2.set_ylabel('PH')
-
-the_table = ax2.table(cellText=df.values.T,
-                    rowLabels=df.columns,
-                    loc='bottom',
-                    bbox=[0, -0.75, 1, 0.65])
-
-fig2.savefig(output_path+'/boxplotsPH.png')
+    PH_mean_02[i] = np.mean(PH_params[i,:,0])
+    PH_mean_05[i] = np.mean(PH_params[i,:,1])
+    PH_mean_10[i] = np.mean(PH_params[i,:,2])
+    
+MSE_mean_geom = np.exp(np.mean(np.log(MSE_params), axis=1))
 
 np.save(output_path+'/MSE_means.npy', MSE_mean)
-np.save(output_path+'/PH_means.npy', PH_mean)
+np.save(output_path+'/PH_means_02.npy', PH_mean_02)
+np.save(output_path+'/PH_means_02.npy', PH_mean_05)
+np.save(output_path+'/PH_means_02.npy', PH_mean_10)
+np.save(output_path+'/MSE_means_geom.npy', MSE_mean_geom)
 
 df_copy = df.copy(deep=True)
 df_copy['mean_MSE'] = MSE_mean
-df_copy['mean_PH'] = PH_mean
+df_copy['mean_PH_02'] = PH_mean_02
+df_copy['mean_PH_05'] = PH_mean_05
+df_copy['mean_PH_10'] = PH_mean_10
+df_copy['mean_MSE_geom'] = MSE_mean_geom
 
 # Save df_copy as CSV
-df_copy.to_csv(output_path+'/gridsearch_dataframe.csv', index=False)
+df_copy.to_csv(output_path+'/Lorenzgridsearch_dataframe.csv', index=False)
 print('data frame saved')
+

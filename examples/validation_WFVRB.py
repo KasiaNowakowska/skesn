@@ -1,7 +1,7 @@
 """
 python script for ESN grid search.
 
-Usage: ESN.py [--input_path=<input_path> --output_path=<output_path> --n_trainLT=<n_train> --n_sync=<n_sync> --n_predictionLT=<n_prediction> --LT=<LT> --splits=<splits> --synchronisation=<synchronisation> --n_reservoir=<n_reservoir> --spectral_radius=<spectral_radius> --sparsity=<sparsity> --lambda_r=<lambda_r> --use_noise=<use_noise> --use_bias=<use_bias> --use_b=<use_b> --input_scaling=<input_scaling> --ensembles=<ensembles>]
+Usage: ESN.py [--input_path=<input_path> --output_path=<output_path> --n_trainLT=<n_train> --n_sync=<n_sync> --n_predictionLT=<n_prediction> --n_washoutLT=<n_washoutLT> --LT=<LT> --splits=<splits> --synchronisation=<synchronisation> --n_reservoir=<n_reservoir> --spectral_radius=<spectral_radius> --sparsity=<sparsity> --lambda_r=<lambda_r> --use_noise=<use_noise> --use_bias=<use_bias> --use_b=<use_b> --input_scaling=<input_scaling> --ensembles=<ensembles>]
 
 Options:
     --input_path=<input_path>          file path to use for data
@@ -9,6 +9,7 @@ Options:
     --n_trainLT=<n_train>                number of training LTs [default: 10]
     --n_sync=<n_sync>                  number of data to synchronise with [default: 10]
     --n_predictionLT=<n_prediction>      number of prediction LTs [default: 3]
+    --n_washoutLT=<n_washoutLT>             number of washout LTs [default: 1]
     --LT=<LT>                           Lyapunov time [default: 400]
     --splits=<splits>                   number of folds [default: 5]
     --synchronisation=<synchronisation>  turn on synchronisation [default: True]
@@ -79,6 +80,7 @@ output_path1 = args['--output_path']
 n_trainLT = int(args['--n_trainLT'])
 n_sync = int(args['--n_sync'])
 n_predictionLT = int(args['--n_predictionLT'])
+n_washoutLT = int(args['--n_washoutLT'])
 LT = int(args['--LT'])
 splits = int(args['--splits'])
 synchronisation = args['--synchronisation']
@@ -94,7 +96,7 @@ ensembles = int(args['--ensembles'])
 
 print(sparsity)
 
-data_dir = '/WFVgeom_validation_n_reservoir{0:}_spectral_radius{1:}_sparsity{2:}_lambda_r{3:}_noise{4:}_bias{5:}_b{6:}_input_scaling{7:}_n_trainLT{8:}_n_predictionLT{9:}_splits{10:}'.format(args['--n_reservoir'], args['--spectral_radius'], args['--sparsity'], args['--lambda_r'], args['--use_noise'], args['--use_bias'], args['--use_b'], args['--input_scaling'], args['--n_trainLT'], args['--n_predictionLT'], args['--splits'])
+data_dir = '/WFVdt2_validation_n_reservoir{0:}_spectral_radius{1:}_sparsity{2:}_lambda_r{3:}_noise{4:}_bias{5:}_b{6:}_input_scaling{7:}_n_trainLT{8:}_n_predictionLT{9:}_n_washoutLT{10:}_splits{11:}'.format(args['--n_reservoir'], args['--spectral_radius'], args['--sparsity'], args['--lambda_r'], args['--use_noise'], args['--use_bias'], args['--use_b'], args['--input_scaling'], args['--n_trainLT'], args['--n_predictionLT'], args['--n_washoutLT'], args['--splits'])
 
 output_path = output_path1+data_dir
 print(output_path)
@@ -121,8 +123,19 @@ print(data.shape)
 ss = StandardScaler()
 
 data = ss.fit_transform(data)
+#data = data[::2]
+#time_vals = time_vals[::2]
+dt = int(time_vals[1]-time_vals[0])
+print('dt=', dt)
 print(np.shape(data))
 
+splits = splits
+n_lyap = int(LT/dt)
+print('N_lyap=', n_lyap)
+synclen = n_sync
+n_prediction_inLT = n_predictionLT
+n_train_inLT = n_trainLT + n_washoutLT #current set up is the washout happens at start so need to add this washout into train time
+n_washout = n_washoutLT*n_lyap
 
 param_grid = dict(n_reservoir=n_reservoir,
                   spectral_radius=spectral_radius,
@@ -135,14 +148,10 @@ param_grid = dict(n_reservoir=n_reservoir,
                   random_state=[42],
                   use_bias=[use_bias],
                   use_b=[use_b],
-                  input_scaling=input_scaling)
+                  input_scaling=input_scaling,
+                  n_washout=[n_washout])
 
 print(param_grid)
-splits = splits
-LT = LT
-synclen = n_sync
-n_prediction_inLT = n_predictionLT
-n_train_inLT = n_trainLT
 
 # Generate all combinations of parameters
 # Get the parameter labels and values
@@ -156,25 +165,20 @@ df = pd.DataFrame(param_combinations, columns=param_labels)
 
 print(df)
 
-MSE_params, PH_params = grid_search_WFV(EsnForecaster, param_grid, data, time_vals, ensembles, splits, LT, n_prediction_inLT, n_train_inLT, n_sync)
+MSE_params, PH_params = grid_search_WFV(EsnForecaster, param_grid, data, time_vals, ensembles, splits, n_lyap, n_prediction_inLT, n_train_inLT, n_sync)
+
+np.save(output_path+'/MSE_params.npy', MSE_params)
+np.save(output_path+'/PH_params.npy', PH_params)
 
 #np.save(output_path+'/prediction_data.npy', prediction_data)
 
-MSE_mean = np.zeros((MSE_params.shape[0])) #number of combinations
-for i in range(MSE_params.shape[0]):
-    MSE_mean[i] = np.mean(MSE_params[i,:])
+MSE_mean = np.mean(MSE_params, axis=1)
     
-PH_mean_02 = np.zeros((PH_params.shape[0]))
-PH_mean_05 = np.zeros((PH_params.shape[0]))
-PH_mean_10 = np.zeros((PH_params.shape[0]))
-for i in range(PH_params.shape[0]):
-    PH_mean_02[i] = np.mean(PH_params[i,:,0])
-    PH_mean_05[i] = np.mean(PH_params[i,:,1])
-    PH_mean_10[i] = np.mean(PH_params[i,:,2])
+PH_mean_02 = np.mean(PH_params[:,:,0], axis=1)
+PH_mean_05 = np.mean(PH_params[:,:,1], axis=1)
+PH_mean_10 = np.mean(PH_params[:,:,2], axis=1)
     
-MSE_mean_geom = np.zeros((MSE_params.shape[0]))
-for i in range(MSE_params.shape[0]):
-    MSE_mean_geom[i] = np.exp(np.mean(np.log(MSE_params), axis=1))
+MSE_mean_geom = np.exp(np.mean(np.log(MSE_params), axis=1))
     
 
 '''
