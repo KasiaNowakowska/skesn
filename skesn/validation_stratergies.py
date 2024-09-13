@@ -327,6 +327,77 @@ def grid_search_WFV(forecaster, param_grid, data, time_vals, ensembles, splits, 
         counter += 1        
         
     return MSE_params, PH_params
+    
+def grid_search_WFV_wandb(forecaster, param_grid, data, time_vals, ensembles, splits, n_lyap, n_prediction_inLT, n_train_inLT, n_sync):
+
+    # 5 folds, 10LTs each (7LT training, 3LT validation) 
+    folds = splits #number of folds
+    LT_train = n_train_inLT #number of LT in training set
+    LT_validation = n_prediction_inLT #number of LT in validation set
+    LT_set = LT_train+LT_validation #number of LT in training + validation sets
+    len_data = n_lyap*folds*LT_set #number of time steps in all the data
+    len_data_fold = LT_set*n_lyap #number of time steps in a fold
+    LT_index = np.arange(0,folds)
+    splits_index = LT_index*n_lyap #the beginning index of each fold
+    print(splits_index)
+
+    dt = time_vals[1] - time_vals[0]
+    synclen = int(n_sync)
+    trainlen = int(LT_train*n_lyap) - synclen
+    predictionlen = int(LT_validation*n_lyap)
+    print(trainlen, predictionlen)
+
+    PH_ens = np.zeros((ensembles * folds, 3))
+    MSE_ens = np.zeros((ensembles * folds))
+
+    counter = 0
+    # Loop through all combinations
+    #param_dict = dict(zip(param_labels, params))
+        
+    modelsync = forecaster(**param_grid)
+    print(modelsync)
+        
+    for f in range(folds):
+        start_index = int(splits_index[f])
+        print(start_index)
+        ts = data[start_index:start_index+trainlen,:]
+        train_times = time_vals[start_index:start_index+trainlen]
+        dt = time_vals[1] - time_vals[0]
+        future_times = time_vals[start_index+trainlen:start_index+trainlen+synclen+predictionlen]
+        sync_times = time_vals[start_index+trainlen:start_index+trainlen+synclen]
+        prediction_times = time_vals[start_index+trainlen+synclen:start_index+trainlen+synclen+predictionlen]
+        test_data = data[start_index+trainlen+synclen:start_index+trainlen+synclen+predictionlen, :]
+        sync_data = data[start_index+trainlen:start_index+trainlen+synclen]
+        future_data = data[start_index+trainlen:start_index+trainlen+synclen+predictionlen, :]
+        variables = data.shape[-1]
+        #print('number of var =', variables)
+        print('start and end training times:', train_times[0], train_times[-1])
+            
+            
+        modelsync.fit(ts)
+
+        ensemble_all_vals_unscaled = np.zeros((len(prediction_times), variables, folds, ensembles))
+            
+        for i in range(ensembles):
+            k = f*ensembles + i
+            print('fold, ensemble member =', f, i)
+            #synchronise data
+            if synclen !=0:
+                modelsync._update(sync_data, UpdateModes = UpdateModes.synchronization)
+            #predict
+            future_predictionsync = modelsync.predict(predictionlen)
+            
+            for v in range(variables):
+                ensemble_all_vals_unscaled[:, v, f, i] = future_predictionsync[:,v]
+                
+            mse = MSE(ensemble_all_vals_unscaled[:,:,f,i], test_data[:,:])
+            MSE_ens[k] = mse
+            PH_ens[k, 0] = prediction_horizon(ensemble_all_vals_unscaled[:,:,f,i], test_data[:,:], threshold = 0.2)
+            PH_ens[k, 1] = prediction_horizon(ensemble_all_vals_unscaled[:,:,f,i], test_data[:,:], threshold = 0.5)
+            PH_ens[k, 2] = prediction_horizon(ensemble_all_vals_unscaled[:,:,f,i], test_data[:,:], threshold = 1.0)
+                    
+        
+    return MSE_ens, PH_ens
 
 '''
 def grid_search_KFV(forecaster, param_grid, data, time_vals, ensembles, splits, n_lyap, n_prediction_inLT, n_train_inLT, n_sync):

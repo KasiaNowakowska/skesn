@@ -96,7 +96,7 @@ ensembles = int(args['--ensembles'])
 
 print(sparsity)
 
-data_dir = '/WFVdt2_validation_n_reservoir{0:}_spectral_radius{1:}_sparsity{2:}_lambda_r{3:}_noise{4:}_bias{5:}_b{6:}_input_scaling{7:}_n_trainLT{8:}_n_predictionLT{9:}_n_washoutLT{10:}_splits{11:}'.format(args['--n_reservoir'], args['--spectral_radius'], args['--sparsity'], args['--lambda_r'], args['--use_noise'], args['--use_bias'], args['--use_b'], args['--input_scaling'], args['--n_trainLT'], args['--n_predictionLT'], args['--n_washoutLT'], args['--splits'])
+data_dir = '/WFVbig_validation_n_reservoir{0:}_spectral_radius{1:}_sparsity{2:}_lambda_r{3:}_noise{4:}_bias{5:}_b{6:}_input_scaling{7:}_n_trainLT{8:}_n_predictionLT{9:}_n_washoutLT{10:}_splits{11:}'.format(args['--n_reservoir'], args['--spectral_radius'], args['--sparsity'], args['--lambda_r'], args['--use_noise'], args['--use_bias'], args['--use_b'], args['--input_scaling'], args['--n_trainLT'], args['--n_predictionLT'], args['--n_washoutLT'], args['--splits'])
 
 output_path = output_path1+data_dir
 print(output_path)
