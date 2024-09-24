@@ -52,6 +52,8 @@ UpdateModes = Enum('UpdateModes', 'synchronization transfer_learning refit')
 
 from validation_stratergies import *
 
+from sklearn.decomposition import PCA
+
 import wandb
 wandb.login()
     
@@ -77,52 +79,102 @@ print(output_path)
 if not os.path.exists(output_path):
     os.makedirs(output_path)
     print('made directory')
+    
+def NRMSE(predictions, true_values):
+    "input: predictions, true_values as (time, variables)"
+    variables = predictions.shape[1]
+    mse = np.mean((true_values-predictions) ** 2, axis = 1)
+    #print(np.shape(mse))
+    rmse = np.sqrt(mse)
+
+    std_squared = np.std(true_values, axis = 0) **2
+    print(np.shape(std_squared))
+    sum_std = np.mean(std_squared)
+    print(sum_std)
+    sqrt_std = np.sqrt(sum_std)
+
+    nrmse = rmse/sqrt_std
+    #print(np.shape(nrmse))
+
+    return nrmse
 
 #### Hyperparmas #####
 # WandB hyperparams settings
 sweep_configuration = {
     "method": "bayes",
     "name": "sweep",
-    "metric": {"goal": "maximize", "name": "PH_02"},
+    "metric": {"goal": "minimize", "name": "MSE_geom"},
     "parameters": {
-        "n_reservoir":{"values": [200, 500, 1000, 2500]},
-        "spectral_radius": {"max": 0.99, "min": 0.01},
-        "sparsity": {"max": 0.99, "min": 0.50},
-        "lambda_r": {"max": 1.00, "min": 0.001},
-        "input_scaling": {"max": 2.0, "min": 0.2},
+        "n_reservoir":{"values": [2000, 4000, 6000]},
+        "spectral_radius": {"max": 0.99, "min": 0.2},
+        "sparsity": {"max": 0.99, "min": 0.3},
+        "lambda_r": {"max": 0.5, "min": 0.01},
+        "input_scaling": {"max": 1.5, "min": 0.5},
     },
 }
 
-sweep_id = wandb.sweep(sweep=sweep_configuration, project="WFV_global")
+sweep_id = wandb.sweep(sweep=sweep_configuration, project="WFV_2D")
+
+##### load in data ######
+q = np.load(input_path+'/q_vertical_allz.npy')
+w = np.load(input_path+'/w_vertical_allz.npy')
+total_time = np.load(input_path+'/total_time.npy')
+x = np.load(input_path+'/x.npy')
+z = np.load(input_path+'/z.npy')
+print(len(q), len(w), len(total_time))
+
+variables = num_variables = 2
+variable_names = ['q', 'w']
+
+data = np.zeros((len(total_time), len(x), 1, len(z), variables))
+data[:,:,:,:,0] = q
+data[:,:,:,:,1] = w
+data = np.squeeze(data, axis=2)
+    
+# Print the shape of the combined array
+print(data.shape)
+
+num_snapshots = 5000
+data_across_x = data[:num_snapshots, :, :, :]
+data_matrix = data_across_x.reshape(num_snapshots, -1)
+time_vals = total_time[:num_snapshots]
+
+del q, w
+del data
+
+#### RUN PCA ####
+pca = PCA(n_components=100)
+# Fit and transform the data
+data_reduced = pca.fit_transform(data_matrix)  # (5000, n_modes)
+# Reconstruct the data
+data_reconstructed_reshaped = pca.inverse_transform(data_reduced)  # (5000, 256 * 2)
+#data_reconstructed_reshaped = ss.inverse_transform(data_reconstructed_reshaped)
+data_reconstructed = data_reconstructed_reshaped.reshape(num_snapshots, len(x), len(z), num_variables)  # (5000, 256, 1, 2)
+components = pca.components_
+# Get the explained variance ratio
+explained_variance_ratio = pca.explained_variance_ratio_
+
+# Calculate cumulative explained variance
+cumulative_explained_variance = np.cumsum(explained_variance_ratio)
+print('cumulative explained variance', cumulative_explained_variance[-1])
+
+nrmse = NRMSE(data_reconstructed_reshaped, data_matrix)
+avg_nrmse = np.mean(nrmse)
+sq_avg_nrmse = avg_nrmse**2
+Energy = 1-sq_avg_nrmse
+curve = 1-Energy
+print('Energy Error (curve value):', curve)
+
+del data_matrix
 
 def main():
 
     run = wandb.init()
-
-    ##### load in data ######
-    q = np.load(input_path+'/q5000_30000.npy')
-    ke = np.load(input_path+'/KE5000_30000.npy')
-    evap = np.load(input_path+'/evap5000_30000.npy')
-    time_vals = np.load(input_path+'/total_time5000_30000.npy')
-    print(len(q), len(ke), len(time_vals))
-
-    ke_column = ke.reshape(len(ke), 1)
-    q_column = q.reshape(len(q), 1)
-    evap_column = evap.reshape(len(evap), 1)
     
-    data = np.hstack((ke_column, q_column))
-    
-    # Print the shape of the combined array
-    print(data.shape)
-    
-    ss = StandardScaler()
-    
-    data = ss.fit_transform(data)
-    #data = data[::2]
-    #time_vals = time_vals[::2]
+    #### ESN ####
+    print('starting ESN ...')
     dt = int(time_vals[1]-time_vals[0])
     print('dt=', dt)
-    print(np.shape(data))
 
     splits = Splits
     n_lyap = int(LT/dt)
@@ -156,7 +208,7 @@ def main():
 
     print(param_grid)
 
-    MSE_ens, PH_ens = grid_search_WFV_wandb(EsnForecaster, param_grid, data, time_vals, ensembles, splits, n_lyap, n_prediction_inLT, n_train_inLT, n_sync)
+    MSE_ens, PH_ens = grid_search_WFV_wandb(EsnForecaster, param_grid, data_reduced, time_vals, ensembles, splits, n_lyap, n_prediction_inLT, n_train_inLT, n_sync)
 
 
 

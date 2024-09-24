@@ -373,7 +373,7 @@ def grid_search_WFV_wandb(forecaster, param_grid, data, time_vals, ensembles, sp
         #print('number of var =', variables)
         print('start and end training times:', train_times[0], train_times[-1])
             
-            
+        
         modelsync.fit(ts)
 
         ensemble_all_vals_unscaled = np.zeros((len(prediction_times), variables, folds, ensembles))
@@ -395,7 +395,7 @@ def grid_search_WFV_wandb(forecaster, param_grid, data, time_vals, ensembles, sp
             PH_ens[k, 0] = prediction_horizon(ensemble_all_vals_unscaled[:,:,f,i], test_data[:,:], threshold = 0.2)
             PH_ens[k, 1] = prediction_horizon(ensemble_all_vals_unscaled[:,:,f,i], test_data[:,:], threshold = 0.5)
             PH_ens[k, 2] = prediction_horizon(ensemble_all_vals_unscaled[:,:,f,i], test_data[:,:], threshold = 1.0)
-                    
+
         
     return MSE_ens, PH_ens
 

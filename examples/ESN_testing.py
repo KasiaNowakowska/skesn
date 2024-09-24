@@ -1,14 +1,16 @@
 """
 python script for ESN grid search.
 
-Usage: ESN.py [--input_path=<input_path> --output_path=<output_path> --n_train=<n_train> --n_sync=<n_sync> --n_prediction=<n_prediction> --synchronisation=<synchronisation> --n_reservoir=<n_reservoir> --spectral_radius=<spectral_radius> --sparsity=<sparsity> --lambda_r=<lambda_r> --beta=<beta> --use_noise=<use_noise> --use_bias=<use_bias> --use_b=<use_b> --input_scaling=<input_scaling>  --ensembles=<ensembles> --index_start=<index_start>]
+Usage: ESN.py [--input_path=<input_path> --output_path=<output_path> --n_trainLT=<n_train> --n_sync=<n_sync> --n_predictionLT=<n_prediction> --n_washoutLT=<n_washoutLT> --LT=<LT> --synchronisation=<synchronisation> --n_reservoir=<n_reservoir> --spectral_radius=<spectral_radius> --sparsity=<sparsity> --lambda_r=<lambda_r> --beta=<beta> --use_noise=<use_noise> --use_bias=<use_bias> --use_b=<use_b> --input_scaling=<input_scaling>  --ensembles=<ensembles> --index_start=<index_start>]
 
 Options:
     --input_path=<input_path>          file path to use for data
     --output_path=<output_path>        file path to save images output [default: ./images]
-    --n_train=<n_train>                number of training data points [default: 6000]
+    --n_trainLT=<n_train>                number of training LTs [default: 10]
     --n_sync=<n_sync>                  number of data to synchronise with [default: 10]
-    --n_prediction=<n_prediction>      number of timesteps for prediction [default: 2000]
+    --n_predictionLT=<n_prediction>      number of prediction LTs [default: 3]
+    --n_washoutLT=<n_washoutLT>             number of washout LTs [default: 1]
+    --LT=<LT>                           Lyapunov time [default: 400]
     --synchronisation=<synchronisation>  turn on synchronisation [default: True]
     --n_reservoir=<n_reservoir>        size of reservoir [default: 2000]
     --spectral_radius=<spectral radius> spectral radius of reservoir [default: 0.80]
@@ -39,10 +41,11 @@ from sklearn.metrics import mean_squared_error
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from cross_validation import ValidationBasedOnRollingForecastingOrigin
 from esn_old_adaptations import EsnForecaster
 
 from scipy.signal import find_peaks
+
+from validation_stratergies import *
 
 import h5py
 
@@ -54,9 +57,11 @@ UpdateModes = Enum('UpdateModes', 'synchronization transfer_learning refit')
     
 input_path = args['--input_path']
 output_path1 = args['--output_path']
-n_train = int(args['--n_train'])
+n_trainLT = int(args['--n_trainLT'])
 n_sync = int(args['--n_sync'])
-n_prediction = int(args['--n_prediction'])
+n_predictionLT = int(args['--n_predictionLT'])
+n_washoutLT = int(args['--n_washoutLT'])
+LT = int(args['--LT'])
 synchronisation = args['--synchronisation']
 n_reservoir = int(args['--n_reservoir'])
 spectral_radius = float(args['--spectral_radius'])
@@ -69,7 +74,7 @@ ensembles = int(args['--ensembles'])
 index_start = int(args['--index_start'])
 input_scaling = float(args['--input_scaling'])
 
-data_dir = '/validation_n_reservoir{0:}_spectral_radius{1:}_sparsity{2:}_lambda_r{3:}_noise{4:}_bias{5:}_b{6:}_start_index{7:}_input_scaling{8:}'.format(args['--n_reservoir'], args['--spectral_radius'], args['--sparsity'], float(args['--lambda_r']), args['--use_noise'], args['--use_bias'], args['--use_b'], args['--index_start'], float(args['--input_scaling']))
+data_dir = '/testing_n_reservoir{0:}_spectral_radius{1:}_sparsity{2:}_lambda_r{3:}_noise{4:}_bias{5:}_b{6:}_start_index{7:}_input_scaling{8:}__n_trainLT{9:}_n_predictionLT{10:}_n_washoutLT{11:}'.format(args['--n_reservoir'], args['--spectral_radius'], args['--sparsity'], float(args['--lambda_r']), args['--use_noise'], args['--use_bias'], args['--use_b'], args['--index_start'], float(args['--input_scaling']), args['--n_trainLT'], args['--n_predictionLT'], args['--n_washoutLT'])
 
 output_path = output_path1+data_dir
 print(output_path)
@@ -99,6 +104,15 @@ ss = StandardScaler()
 
 data = ss.fit_transform(data)
 print(np.shape(data))
+dt = int(time_vals[1]-time_vals[0])
+print('dt=', dt)
+
+n_lyap = int(LT/dt)
+print('N_lyap=', n_lyap)
+synclen = n_sync
+n_prediction_inLT = n_predictionLT
+n_train_inLT = n_trainLT + n_washoutLT #current set up is the washout happens at start so need to add this washout into train time
+n_washout = n_washoutLT*n_lyap
 
 #generate model
 modelsync = EsnForecaster(
@@ -116,21 +130,14 @@ modelsync = EsnForecaster(
             input_scaling=input_scaling)
 
 # Plot long-term prediction
-synclen = n_sync
-trainlen = n_train - synclen
-print('trainlen', trainlen)
-U_train = data[index_start:index_start+trainlen,:]
-print(index_start, index_start+trainlen)
-train_times = time_vals[index_start:index_start+trainlen]
-dt = time_vals[1] - time_vals[0]
-N_test = n_prediction
-print('N_Test=', N_test)
-test_index_start = index_start+n_train
-print(test_index_start)
-test_indices = np.arange(test_index_start, test_index_start+10000, 100)
-print(test_indices)
-IC_number = len(test_indices)
-len(test_indices)
+
+
+N_train = n_train_inLT*n_lyap
+N_val = N_test = n_prediction_inLT*n_lyap
+test_index_start = index_start - n_train_inLT*n_lyap
+
+U_train = data[test_index_start:test_index_start+N_train-synclen]
+times_train = time_vals[test_index_start:test_index_start+N_train-synclen]
 
 #generate model
 modelsync = EsnForecaster(
@@ -147,6 +154,12 @@ modelsync = EsnForecaster(
             use_b=use_b,
             input_scaling=input_scaling)
 modelsync.fit(U_train)
+
+test_index = test_index_start
+test_indices = np.arange(test_index, test_index+15*n_lyap, 50)
+IC_number = len(test_indices)
+print(test_indices)
+print('IC_number:', IC_number)
 
 variables = len(data[1])
 
@@ -179,3 +192,5 @@ for index, test_index in enumerate(test_indices):
 print(np.shape(ensemble_all_vals))
 np.save(output_path+'/ensemble%i_all_vals.npy' % ensembles, ensemble_all_vals)
 np.save(output_path+'/ensemble%i_all_vals_unscaled.npy' % ensembles, ensemble_all_vals_unscaled)
+
+
