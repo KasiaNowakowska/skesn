@@ -136,3 +136,4 @@ dmypy.json
 
 /data
 /skesn/wandb
+/examples/tensor_flow_example.py
