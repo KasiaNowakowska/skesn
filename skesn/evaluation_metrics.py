@@ -540,3 +540,17 @@ def peaks_plot(test_data, prediction_times, ax=ax):
     #print(tp[1], tp[2])
     ax.scatter(tp[1], tp[2], marker='x', color='red')
 
+def FFT(variable, time):
+    variable = variable - np.mean(variable)
+    fs = len(time)/(time[-1]-time[0])
+    end = time[-1]
+    start = time[0]
+    fft = np.fft.fft(variable)
+    fft = np.fft.fftshift(fft)
+    om = np.fft.fftfreq(len(time), d=(end-start)/len(time))
+    om = np.fft.fftshift(om)
+    #om = 2*np.pi*om
+    magnitude_w = abs(fft)
+    psd = magnitude_w
+    return om, psd
+
