@@ -15,6 +15,8 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')  # Set the backend to Agg
 import matplotlib.pyplot as plt
 
 from esn_old_adaptations import EsnForecaster
@@ -70,6 +72,23 @@ def MSE(predictions, true_values):
     MSE = 1/Nu * norm_squared
 
     return MSE
+
+def NRMSE(predictions, true_values):
+    "input: predictions, true_values as (time, variables)"
+    variables = predictions.shape[1]
+    mse = np.mean((true_values-predictions) ** 2, axis = 1)
+    #print(np.shape(mse))
+    rmse = np.sqrt(mse)
+    std_squared = np.std(true_values, axis = 0) **2
+    print(np.shape(std_squared))
+    sum_std = np.mean(std_squared)
+    print(sum_std)
+    sqrt_std = np.sqrt(sum_std)
+
+    nrmse = rmse/sqrt_std
+    #print(np.shape(nrmse))
+
+    return nrmse
 
 def grid_search_SSV_retrained(forecaster, param_grid, data, time_vals, ensembles_retrain, n_prediction, n_train, n_sync):
     """

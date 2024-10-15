@@ -46,6 +46,7 @@ from esn_old_adaptations import EsnForecaster
 from scipy.signal import find_peaks
 
 from validation_stratergies import *
+import evaluation_metrics as evalm
 
 import h5py
 
@@ -80,6 +81,12 @@ output_path = output_path1+data_dir
 print(output_path)
 if not os.path.exists(output_path):
     os.makedirs(output_path)
+    print('made directory')
+
+output_path_images = output_path+'/Images'
+print(output_path_images)
+if not os.path.exists(output_path_images):
+    os.makedirs(output_path_images)
     print('made directory')
 
 #load in data
@@ -156,7 +163,8 @@ modelsync = EsnForecaster(
 modelsync.fit(U_train)
 
 test_index = test_index_start
-test_indices = np.arange(test_index, test_index+15*n_lyap, 50)
+#test_indices = np.arange(test_index, test_index+15*n_lyap, 50)
+test_indices = np.arange(test_index, test_index+3*n_lyap, 100)
 IC_number = len(test_indices)
 print(test_indices)
 print('IC_number:', IC_number)
@@ -165,6 +173,8 @@ variables = len(data[1])
 
 ensemble_all_vals = np.zeros((N_test, variables, IC_number, ensembles))
 ensemble_all_vals_unscaled = np.zeros((N_test, variables, IC_number, ensembles))
+
+inspect_graphs = True
 
 for index, test_index in enumerate(test_indices):
     print(test_index)
@@ -192,5 +202,30 @@ for index, test_index in enumerate(test_indices):
 print(np.shape(ensemble_all_vals))
 np.save(output_path+'/ensemble%i_all_vals.npy' % ensembles, ensemble_all_vals)
 np.save(output_path+'/ensemble%i_all_vals_unscaled.npy' % ensembles, ensemble_all_vals_unscaled)
+
+
+variable_names = ['KE', 'q']
+if inspect_graphs == True:
+    for index, test_index in enumerate(test_indices):
+        if index % 4 == 0:
+            fig, ax = plt.subplots(2, figsize=(12,6), tight_layout=True, sharex=True)
+            evalm.ensemble_timeseries(ensemble_all_vals[:,:,index,:], ss.inverse_transform(data[test_index:test_index+N_test,:]), time_vals[test_index:test_index+N_test], variables, variable_names, ax=ax)
+            ax[1].legend()
+            fig.savefig(output_path_images+'/timeseries_ens%i.png' % test_index)
+            plt.close()
+
+    fig, ax =plt.subplots(2, figsize=(12,6), tight_layout=True, sharex=True)
+    for index, index_start in enumerate(test_indices):
+        if index % 5 == 0:
+            evalm.ensemble_timeseries(ensemble_all_vals_IC[:,:,index,:], ss.inverse_transform(data[index_start:index_start+N_test, :]), time_vals[index_start:index_start+N_test], variables, variable_names, ax=ax)
+    ax[0].plot(time_vals[test_indices[0]:test_indices[-1]+3*n_lyap], ss.inverse_transform(data[test_indices[0]:test_indices[-1]+3*n_lyap, 0]), alpha=0.2)
+    ax[1].plot(time_vals[test_indices[0]:test_indices[-1]+3*n_lyap], ss.inerse_transfrom(data[test_indices[0]:test_indices[-1]+3*n_lyap, 1]), alpha=0.2)
+    ax[1].set_xlim(time_vals[test_indices[0]], time_vals[test_indices[-1]+3*n_lyap])
+    fig.savefig(output_path_images+'/timeseries_ens_sample.png')
+    plt.close()
+
+
+
+
 
 
