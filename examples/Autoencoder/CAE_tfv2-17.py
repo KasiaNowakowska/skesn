@@ -16,7 +16,6 @@ sys.path.append('/nobackup/mm17ktn/ENS/skesn/skesn/')
 
 import time
 
-
 import os
 sys.path.append(os.getcwd())
 import matplotlib.pyplot as plt
@@ -41,6 +40,12 @@ for gpu in gpus:
 # tf.config.set_visible_devices([], 'GPU') #runs the code without GPU
 import time
 from pathlib import Path
+
+import wandb
+wandb.login()
+
+input_path = args['--input_path']
+output_path = args['--output_path']
 
 q_array = np.load(input_path+'/q_vertical_allz.npy')
 w_array = np.load(input_path+'/w_vertical_allz.npy')
@@ -82,8 +87,8 @@ def split_data(U, b_size, n_batches):
     return data
 
 b_size      = 5   #batch_size
-n_batches   = int((U.shape[0]/b_size) *0.7)  #number of batches #20
-val_batches = int((U.shape[0]/b_size) *0.2)    #int(n_batches*0.2) # validation set size is 0.2 the size of the training set #2
+n_batches   = 5 #int((U.shape[0]/b_size) *0.7)  #number of batches #20
+val_batches = 2 #int((U.shape[0]/b_size) *0.2)    #int(n_batches*0.2) # validation set size is 0.2 the size of the training set #2
 test_batches = int((U.shape[0]/b_size) *0.1)
 skip        = 1
 print(n_batches, val_batches, test_batches)
@@ -321,7 +326,7 @@ rng = np.random.default_rng() #random generator for later shufflinh
 
 Loss_Mse    = tf.keras.losses.MeanSquaredError()
 
-n_epochs    = 101 #number of epochs
+n_epochs    = 1 #number of epochs
 
 #define optimizer and initial learning rate
 optimizer  = tf.keras.optimizers.Adam(amsgrad=True) #amsgrad True for better convergence
